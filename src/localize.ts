@@ -273,6 +273,8 @@ const translations = {
     editor_icon_fill_solid: "Kräftig — farbige Fläche, dunkles Icon",
     editor_shape_by_state_helper:
       "Eingeschaltet ist die Kachel eckiger und das Icon sitzt auf einem abgerundeten Quadrat; ausgeschaltet wird sie zur Kapsel und das Icon rund. Der Wechsel wird weich animiert. So sieht man am Umriss, ob etwas an ist — nicht nur an der Farbe.",
+    editor_button_chip_buttons: "Chip Buttons",
+    editor_button_chip_buttons_justify_helper: "Die Ausrichtung greift nur, wenn die Karte höher als eine normale Zeile ist. Bei normaler Höhe werden die Chips immer rechtsbündig angezeigt.",
     editor_tap_action: "Tap-Aktion",
     editor_icon_tap_action: "Tap-Aktion (Icon)",
     editor_hold_action: "Halten-Aktion",
@@ -2343,6 +2345,8 @@ const translations = {
     editor_icon_fill_solid: "Bold — coloured well, dark glyph",
     editor_shape_by_state_helper:
       "Switched on, the tile is squarer and the icon sits on a rounded square; switched off it becomes a capsule and the icon a circle. The change is animated. The outline then says whether something is on, not only the colour.",
+    editor_button_chip_buttons: "Chip Buttons",
+    editor_button_chip_buttons_justify_helper: "Alignment only applies once the card is resized taller than a normal row. At normal height, chips are always right-aligned.",
     editor_tap_action: "Tap action",
     editor_icon_tap_action: "Tap action (icon)",
     editor_hold_action: "Hold action",
