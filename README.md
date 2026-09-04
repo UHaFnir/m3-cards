@@ -7,7 +7,7 @@
 Material 3–inspired, native Lovelace cards for Home Assistant — built with
 TypeScript + [Lit](https://lit.dev), **without** any dependency on
 `button-card`, `card-mod`, `mod-card`, or `stack-in-card`. A single bundle
-(`m3-cards.js`) registers **39 cards**, all sharing one design language.
+(`m3-cards.js`) registers **40 cards**, all sharing one design language.
 
 New here? Start with the category that matches what you want to show — every
 card links to its full documentation further down.
@@ -77,6 +77,7 @@ card links to its full documentation further down.
 | [Updates](#m3-updates-card) | `m3-updates-card` | Every available update (core, OS, add-ons, HACS, firmware) |
 | [NAS](#m3-nas-card--m3-system-card) | `m3-nas-card` | NAS volumes, CPU, RAM, network via Glances + Syncthing |
 | [System](#m3-nas-card--m3-system-card) | `m3-system-card` | The same, fed by the System Monitor integration |
+| [Search](#m3-search-card) | `m3-search-card` | A Material 3 search bar on the dashboard, opening HA's entity/command search and Assist |
 
 ### 🐠 Special
 
@@ -3705,6 +3706,46 @@ cards:
 | `corners` | object | – | Optional per-corner override, same as every other card |
 | `glass_background` | boolean | `true` | Frosted glass background |
 | `card_background` | string | – | Override background color |
+
+</details>
+
+## M3 Search Card
+
+A Material 3 search bar that lives on the dashboard itself, opening Home
+Assistant's own entity or command quick bar — and Assist. The header's search
+button disappears on a narrow screen; this card fills that gap.
+
+<details>
+<summary>Configuration, examples & options</summary>
+
+```yaml
+type: custom:m3-search-card
+placeholder: Search Home Assistant
+mode: entity          # entity | command
+show_assist: true
+```
+
+Tapping the bar opens Home Assistant's quick bar — `entity` searches entities
+(the `e` shortcut), `command` runs services and admin actions (the `c`
+shortcut, admin accounts only). A configured `tap_action` replaces this
+behaviour entirely, for dashboards that want the bar to do something else. If
+the profile has keyboard shortcuts turned off, the quick bar has no way to
+open, and the card says so instead of pretending to be usable.
+
+The Assist button is shown by default whenever Assist is available, mirroring
+the header's own — set `show_assist: false` to drop it.
+
+### Configuration options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `placeholder` / `label` | string | localized | Resting text in the bar. `placeholder` wins if both are set |
+| `icon` | string | `mdi:magnify` | Leading icon |
+| `mode` | string | `entity` | `entity` or `command` — which quick bar a tap opens |
+| `tap_action` | action | – | Replaces the built-in quick-bar behaviour entirely |
+| `show_assist` | boolean | `true` | Show the trailing Assist button |
+| `assist_icon` | string | `mdi:microphone` | Assist button icon |
+| `accent_color` | string | – | Icon and Assist button color |
 
 </details>
 
