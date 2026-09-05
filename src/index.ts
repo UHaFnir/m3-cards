@@ -37,3 +37,4 @@ export * from "./m3-calendar-card";
 export * from "./m3-nav-card";
 export * from "./m3-chip-buttons-card";
 export * from "./m3-group-card";
+export * from "./m3-search-card";

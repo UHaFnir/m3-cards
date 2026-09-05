@@ -41,7 +41,7 @@ import {
   CLIMATE_OVERVIEW_MOLD_TEMP_THRESHOLD,
   resolveCornerRadius,
 } from "./const";
-import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, foregroundOn } from "./shared/color-config";
+import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, tintInk, foregroundOn } from "./shared/color-config";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { renderCardHeader, cardHeaderStyles } from "./shared/card-header";
 import { shouldAnimate, STANDARD_EASING } from "./shared/animation";
@@ -878,7 +878,7 @@ export class M3ClimateOverviewCard extends TemplatedCard(LitElement) implements 
                   ? html`
                       <div
                         class="outlier-chip"
-                        style=${`background: ${tintOn(this, outlier.tile.tempColor, this._config.tile_tint_opacity, 18)}; color: ${outlier.tile.tempColor};`}
+                        style=${`background: ${tintOn(this, outlier.tile.tempColor, this._config.tile_tint_opacity, 18)}; color: ${tintInk(this, outlier.tile.tempColor, this._config.tile_tint_opacity, 18)};`}
                         role="button"
                         tabindex="0"
                         aria-label=${outlier.tile.name}
@@ -944,7 +944,7 @@ export class M3ClimateOverviewCard extends TemplatedCard(LitElement) implements 
         class="room-tile ${tile.temperatureUnavailable ? "unavailable" : ""} ${this._pressedKey === tile.key
           ? "pressed"
           : ""}"
-        style=${`--tile-color: ${tile.tempColor}; background: ${tintOn(this, tile.tempColor, this._config?.tile_tint_opacity, 12)};`}
+        style=${`--tile-color: ${tile.tempColor}; --tile-ink: ${tintInk(this, tile.tempColor, this._config?.tile_tint_opacity, 12)}; background: ${tintOn(this, tile.tempColor, this._config?.tile_tint_opacity, 12)};`}
         role="button"
         tabindex="0"
         aria-label=${tile.name}
@@ -1053,7 +1053,7 @@ export class M3ClimateOverviewCard extends TemplatedCard(LitElement) implements 
 
       .tile-header ha-icon {
         --mdc-icon-size: 13px;
-        color: var(--tile-color);
+        color: var(--tile-ink, var(--tile-color));
         flex-shrink: 0;
       }
 
@@ -1082,7 +1082,7 @@ export class M3ClimateOverviewCard extends TemplatedCard(LitElement) implements 
 
       .trend-icon {
         --mdc-icon-size: 12px;
-        color: var(--tile-color);
+        color: var(--tile-ink, var(--tile-color));
         opacity: 0.8;
         margin-left: 2px;
         align-self: center;
@@ -1091,13 +1091,13 @@ export class M3ClimateOverviewCard extends TemplatedCard(LitElement) implements 
       .temp-value {
         font-size: 21px;
         font-weight: 700;
-        color: var(--tile-color);
+        color: var(--tile-ink, var(--tile-color));
       }
 
       .temp-unit {
         font-size: 11px;
         font-weight: 500;
-        color: var(--tile-color);
+        color: var(--tile-ink, var(--tile-color));
       }
 
       .tile-humidity {
