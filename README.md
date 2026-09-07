@@ -4399,6 +4399,21 @@ rather than drawing a control that silently does nothing:
   `default_config`, so it is normally there — where it is not, the trailing
   button is left out.
 
+### One known limitation: the back gesture does not close the dialog
+
+On Android, swiping back while the quick bar is open navigates the dashboard
+away instead of closing the dialog. That is not this card's doing and it is
+not fixable from here: Home Assistant's more-info dialog pushes a history
+entry when it opens (`{dialog: "ha-more-info-dialog"}`), which is what gives
+the back gesture something to pop — and the quick bar pushes nothing at all,
+so the gesture reaches the router instead.
+
+It is worth stating plainly because this card is what makes the quick bar
+reachable on a phone in the first place, which is exactly where the back
+gesture is the reflex. Close it with the dialog's own close button or with
+`Esc`. If the frontend ever pushes an entry for the quick bar too, this
+disappears on its own with no change here.
+
 ### Configuration options
 
 | Option | Type | Default | Description |
