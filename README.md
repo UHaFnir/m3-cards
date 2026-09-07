@@ -1562,6 +1562,61 @@ hold_action:
     message: Someone held a tile
 ```
 
+### Per-person popups
+
+`tap_action` is one setting for the whole grid, so it cannot give two people
+two different destinations. `person_popups` can: it maps an `entity_id` to a
+popup holding any Lovelace card, and a person listed there opens it on tap.
+
+```yaml
+type: custom:m3-presence-card
+person_popups:
+  person.jane:
+    title: Jane            # optional; the person's name is used otherwise
+    size: wide             # normal (default) | wide | fullscreen
+    content:
+      type: vertical-stack
+      cards:
+        - type: custom:m3-battery-card
+          entity: sensor.jane_phone_battery
+        - type: map
+          entities: [person.jane]
+```
+
+It is keyed by entity rather than configured per entry because `entities` is a
+plain list of ids — and is not written at all under `auto_discover` — so there
+is no per-person object to hang a popup off.
+
+Only the people listed get one. Everyone else keeps the more-info a tap has
+always opened, so adding a popup for one person changes nothing for the rest,
+and no `tap_action` is needed to switch it on. An explicit `tap_action` still
+wins over the default, which is how the popup goes on the long press instead:
+
+```yaml
+tap_action:
+  action: more-info
+hold_action:
+  action: popup
+```
+
+`[[entity_id]]` and `[[name]]` anywhere in `content` are replaced with the
+tapped person's — the same placeholder syntax the other cards' popups use, and
+deliberately distinct from card-mod's `[[[ ]]]` and Jinja's `{{ }}` so the
+three do not collide. That means the same body can be repeated for everyone
+without rewriting the entity into it each time:
+
+```yaml
+person_popups:
+  person.jane:
+    content:
+      type: markdown
+      content: "[[name]] is {{ states('[[entity_id]]') }}"
+```
+
+A person named in `person_popups` who is not on the card is simply never
+tapped, and an `action: popup` on someone with no popup configured falls back
+to their more-info rather than opening an empty dialog.
+
 
 ### Configuration options
 
@@ -1578,8 +1633,9 @@ hold_action:
 | `sort` | `home_first` \| `name` | `home_first` | Sort order: home first or alphabetical |
 | `home_color` / `not_home_color` / `zone_color` / `unknown_color` | string | green/blue/purple/gray | Status ring colors |
 | `zone_colors` | object (zone name → color) | – | Override per named zone |
-| `tap_action` | action object | more-info | Action on a tap on an avatar, targeting that person. Unset, a tap opens their more-info |
+| `tap_action` | action object | more-info | Action on a tap on an avatar, targeting that person. Unset, a tap opens their more-info — or their `person_popups` entry, if they have one. Adds a `popup` action kind |
 | `hold_action` | action object | – | Action on a long press (500ms) on an avatar, targeting that person |
+| `person_popups` | object (`entity_id` → popup) | – | Per-person popup: `title`, `size` (`normal`/`wide`/`fullscreen`) and a `content` card. Listed people open theirs on tap |
 | `text_color` / `secondary_text_color` | string | theme default | Names vs. status line |
 | `card_background` | string | glass/solid background | Card background |
 | `animation` | `auto` \| `on` \| `off` | `auto` | Status-change animation; `auto`/`on` respect `prefers-reduced-motion` |
@@ -3514,6 +3570,44 @@ Each chip carries its own colour, icon and optional `states` rules, and a chip
 whose entity is unavailable is left out rather than dimmed — a row of "—" says
 nothing and pushes the ones that do say something off the edge.
 
+### The popup
+
+The card is a summary: a state, a progress bar, a few buttons. The full set of
+controls — every programme, every option, the history — does not belong on a
+dashboard tile, but it does belong one tap away. `popup` is that.
+
+```yaml
+type: custom:m3-appliance-card
+entity: sensor.washer_state
+name: Washing machine
+popup:
+  title: Washing machine        # optional; the card's name is used otherwise
+  size: normal                  # normal (default) | wide | fullscreen
+  content:
+    type: vertical-stack
+    cards:
+      - type: custom:m3-appliance-card
+        entity: sensor.washer_state
+      - type: history-graph
+        entities: [sensor.washer_power]
+```
+
+A card with a popup configured opens it on tap, so the common case needs no
+`tap_action` at all. An explicit one still wins, which is how the popup goes on
+a different gesture, or how a card keeps its more-info:
+
+```yaml
+tap_action:
+  action: more-info
+hold_action:
+  action: popup
+```
+
+`[[entity_id]]` and `[[name]]` anywhere in `content` resolve to this card's, so
+one popup body can be reused across several appliances. An `action: popup` on a
+card with no `popup` configured falls back to more-info rather than opening an
+empty dialog.
+
 ### Options
 
 | Option | Default | What it does |
@@ -3530,7 +3624,8 @@ nothing and pushes the ones that do say something off the edge.
 | `buttons[]` | — | `entity`, `name`, `icon`, `color`, `tap_action` |
 | `chips[]` | — | `entity`, `name`, `icon`, `label`, `show_state`, `states`, `color`, `tap_action` |
 | `layout` | all five | Which blocks, in which order |
-| `tap_action` | `more-info` | What a tap on the header does |
+| `tap_action` | `more-info`, or `popup` when one is configured | What a tap on the header does. Adds a `popup` action kind |
+| `popup` | — | The card's own popup: `title`, `size` (`normal`/`wide`/`fullscreen`) and a `content` card |
 | `accent_color` | `#85b7eb` | Overridden by a matched rule's own `color` |
 | `text_color` / `secondary_text_color` / `card_background` | theme | The usual colour overrides |
 | `glass_background` | `true` | Frosted card surface |

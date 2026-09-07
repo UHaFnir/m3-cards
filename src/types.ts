@@ -757,6 +757,32 @@ export interface M3WeatherCardConfig {
 
 export type PresenceSortMode = "home_first" | "name";
 
+/**
+ * How wide the shared popup chrome renders. `normal` is the width every
+ * existing popup has had; the other two exist for content that needs more room
+ * than a phone-width sheet.
+ */
+export type PopupSize = "normal" | "wide" | "fullscreen";
+
+/**
+ * One person's popup: any Lovelace card, shown in the shared popup chrome.
+ *
+ * Keyed by `entity_id` rather than configured per entry because `entities` is a
+ * plain id list (and is not written at all under `auto_discover`), so there is
+ * no per-person object to hang this off. A person with no entry here keeps
+ * whatever `tap_action` says.
+ */
+export interface PresencePersonPopupConfig {
+  /** Shown in the popup's top bar. Falls back to the person's name. */
+  title?: string;
+  size?: PopupSize;
+  /**
+   * The card to show. `[[entity_id]]` and `[[name]]` placeholders anywhere in
+   * it are substituted with the tapped person's — see shared/card-template.ts.
+   */
+  content: Record<string, unknown>;
+}
+
 export interface M3PresenceCardConfig {
   type: string;
   entities?: string[];
@@ -783,6 +809,13 @@ export interface M3PresenceCardConfig {
    */
   tap_action?: HaActionConfig;
   hold_action?: HaActionConfig;
+  /**
+   * Per-person popups, keyed by `entity_id`. A person listed here opens their
+   * popup on tap instead of more-info, so the common case needs no
+   * `tap_action` at all; an explicit one still wins, and `action: popup` is
+   * available to put the popup on `hold_action` instead.
+   */
+  person_popups?: Record<string, PresencePersonPopupConfig>;
   text_color?: string;
   secondary_text_color?: string;
   card_background?: string;
@@ -2435,6 +2468,17 @@ export interface ApplianceChipConfig {
 /** The blocks the card can draw, in the order they should appear. */
 export type ApplianceBlock = "progress" | "sliders" | "selects" | "buttons" | "chips";
 
+export interface AppliancePopupConfig {
+  /** Shown in the popup's top bar. Falls back to the card's name. */
+  title?: string;
+  size?: PopupSize;
+  /**
+   * The card to show. `[[entity_id]]` and `[[name]]` placeholders in it resolve
+   * to this card's — see shared/card-template.ts.
+   */
+  content: Record<string, unknown>;
+}
+
 export interface M3ApplianceCardConfig {
   type: string;
   /**
@@ -2470,6 +2514,7 @@ export interface M3ApplianceCardConfig {
   wave_style?: WaveStyle;
 
   tap_action?: HaActionConfig;
+  popup?: AppliancePopupConfig;
   accent_color?: string;
   accent_opacity?: number;
   text_color?: string;

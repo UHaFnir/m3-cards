@@ -299,6 +299,7 @@ export class M3PresenceCardEditor extends LitElement implements LovelaceCardEdit
               @value-changed=${this._valueChanged}
             ></ha-form>
             <div class="hint">${this._t("editor_presence_actions_hint")}</div>
+            <div class="hint">${this._t("editor_presence_popups_hint")}</div>
           </div>
         </ha-expansion-panel>
 

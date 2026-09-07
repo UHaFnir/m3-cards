@@ -161,7 +161,46 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
     volume_1: Media
   ```
 
+- **The appliance card gets its own popup**, via `popup`. The card is a summary
+  — a state, a progress bar, a few buttons. The full set of controls (every
+  programme, every option, the history) does not belong on a dashboard tile, but
+  it does belong one tap away, and `popup` is that: a `title`, a `size` of
+  `normal`/`wide`/`fullscreen`, and any Lovelace card as `content`.
+
+  A card with a popup configured opens it on tap, so the common case needs no
+  `tap_action`; an explicit one still wins. `[[entity_id]]` and `[[name]]` in
+  the content resolve to that card's, so one popup body can be reused across
+  several appliances. An `action: popup` on a card with no `popup` falls back to
+  more-info rather than opening an empty dialog.
+
+- **Per-person popups on the presence card**, via `person_popups`. `tap_action`
+  is card-level — one setting for the whole grid — so it could send everybody
+  to the same place but never each person to their own. `person_popups` maps an
+  `entity_id` to a popup holding any Lovelace card, with an optional `title` and
+  a `size` of `normal`, `wide` or `fullscreen`.
+
+  A person listed there opens their popup on tap, so the common case needs no
+  `tap_action` at all; requiring one alongside the popup would be a second thing
+  to remember that could only ever be set one way. Everyone else keeps the
+  more-info a tap has always opened, so adding a popup for one person changes
+  nothing for the others. An explicit `tap_action` still wins, which is how the
+  popup goes on the long press instead (`hold_action: {action: popup}`).
+
+  `[[entity_id]]` and `[[name]]` in the content are substituted with the tapped
+  person's, the same placeholders the other cards' popups use. An `action: popup`
+  on someone with no popup configured falls back to their more-info rather than
+  opening an empty dialog.
+
+  The card moves from `handleAction` to `runHaAction` to get the `popup` kind;
+  the branches the two share behave identically, so no other action changes.
+
 ### Changed
+
+- **The shared popup chrome takes an optional title and size.** It was a bare
+  close-button strip at one fixed width, which is all the popups that existed
+  needed. With a title it becomes a real header row, and `wide`/`fullscreen`
+  widen it. Both are opt-in: a caller that passes neither renders exactly as
+  before.
 
 - **The presence card's `hold_action` now runs through the shared action
   handler**, like every other card's. It used to implement `navigate` and `url`
@@ -335,7 +374,51 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
     volume_1: Medien
   ```
 
+- **Die Geräte-Karte bekommt ein eigenes Popup**, über `popup`. Die Karte ist
+  eine Zusammenfassung — ein Zustand, ein Fortschrittsbalken, ein paar Knöpfe.
+  Der vollständige Satz an Bedienelementen (jedes Programm, jede Option, der
+  Verlauf) gehört nicht auf eine Dashboard-Kachel, aber sehr wohl einen Tap
+  daneben — genau das ist `popup`: ein `title`, ein `size` aus
+  `normal`/`wide`/`fullscreen` und eine beliebige Lovelace-Karte als `content`.
+
+  Eine Karte mit konfiguriertem Popup öffnet es beim Tap; der Normalfall braucht
+  also keine `tap_action`, eine ausdrückliche gewinnt weiterhin. `[[entity_id]]`
+  und `[[name]]` im Inhalt lösen sich auf die jeweilige Karte auf, sodass ein
+  Popup-Rumpf für mehrere Geräte wiederverwendet werden kann. Ein
+  `action: popup` ohne konfiguriertes `popup` fällt auf die Detailansicht
+  zurück, statt einen leeren Dialog zu öffnen.
+
+- **Eigene Popups pro Person auf der Anwesenheitskarte**, über `person_popups`.
+  Die `tap_action` gilt für die ganze Karte — eine Einstellung für das gesamte
+  Raster — konnte also alle an denselben Ort schicken, aber nie jede Person an
+  ihren eigenen. `person_popups` ordnet einer `entity_id` ein Popup mit einer
+  beliebigen Lovelace-Karte zu, dazu optional `title` und ein `size` von
+  `normal`, `wide` oder `fullscreen`.
+
+  Wer dort eingetragen ist, öffnet beim Tap sein Popup; der Normalfall braucht
+  also gar keine `tap_action`. Eine zusätzlich zu fordern wäre eine zweite Sache
+  zum Merken, die ohnehin nur einen sinnvollen Wert hätte. Alle anderen behalten
+  die Detailansicht, die ein Tap immer geöffnet hat — ein Popup für eine Person
+  ändert für die übrigen nichts. Eine ausdrückliche `tap_action` gewinnt
+  weiterhin; so wandert das Popup auf den langen Druck
+  (`hold_action: {action: popup}`).
+
+  `[[entity_id]]` und `[[name]]` im Inhalt werden durch die angetippte Person
+  ersetzt — dieselben Platzhalter, die auch die Popups der anderen Karten
+  verwenden. Ein `action: popup` bei jemandem ohne konfiguriertes Popup fällt
+  auf dessen Detailansicht zurück, statt einen leeren Dialog zu öffnen.
+
+  Die Karte wechselt von `handleAction` zu `runHaAction`, um die Art `popup` zu
+  erhalten; die gemeinsamen Zweige verhalten sich identisch, es ändert sich also
+  keine andere Aktion.
+
 ### Geändert
+
+- **Das gemeinsame Popup-Gerüst nimmt optional Titel und Größe entgegen.** Es
+  war eine blanke Leiste mit Schließen-Knopf in einer festen Breite — mehr
+  brauchten die bisherigen Popups nicht. Mit einem Titel wird daraus eine echte
+  Kopfzeile, und `wide`/`fullscreen` verbreitern sie. Beides ist optional: Wer
+  nichts davon übergibt, bekommt exakt die bisherige Darstellung.
 
 - **Die `hold_action` der Anwesenheitskarte läuft nun über den gemeinsamen
   Aktions-Handler**, wie bei jeder anderen Karte. Bisher setzte sie `navigate`

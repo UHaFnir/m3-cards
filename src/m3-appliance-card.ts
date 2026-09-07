@@ -74,7 +74,15 @@ import {
 import { localize, type TranslationKey } from "./localize";
 import { activateOnKey } from "./shared/a11y";
 import { shouldAnimate, STANDARD_EASING } from "./shared/animation";
-import { handleAction, isActionable } from "./shared/actions";
+import { runHaAction, isActionable } from "./shared/actions";
+import { DetailCardController } from "./shared/detail-card";
+import {
+  renderPopupDialog,
+  syncDialogOpenState,
+  shouldCloseOnBackdropClick,
+  popupCardStyles,
+  type PopupCardHandle,
+} from "./shared/popup-card";
 import {
   prettifyOption,
   prettifyState,
@@ -148,6 +156,11 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @state() private _config?: M3ApplianceCardConfig;
+  @state() private _popupOpen = false;
+  @state() private _popupCardEl?: HTMLElement & PopupCardHandle;
+
+  private _popupOpenedAt = 0;
+  private readonly _popupCard = new DetailCardController();
   @state() private _narrow = false;
   /** Only advances when doing so would change a shown minute — see `_onTick`. */
   @state() private _now = Date.now();
@@ -309,6 +322,12 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
       this._blockObserver.disconnect();
       this._blockObserver.observe(el);
     }
+    this._maybeSyncPopupCard();
+    if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
+    if (changed.has("_popupOpen")) {
+      const dialog = this.renderRoot?.querySelector("dialog") as HTMLDialogElement | null;
+      syncDialogOpenState(dialog, this._popupOpen);
+    }
   }
 
   public disconnectedCallback(): void {
@@ -437,7 +456,90 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
     // `confirmation:` on any of them is asked for in exactly one place — and
     // `navigate`, `url` and `perform-action` behave as they do on every other
     // card in the suite.
-    handleAction(this, this.hass, action, entityId);
+    //
+    // `runHaAction` rather than `handleAction` because only the former knows
+    // the `popup` kind; the branches the two share behave identically.
+    if (!this.hass) return;
+    runHaAction(this.hass, action, {
+      entityId,
+      openPopup: () => this._openPopup(),
+      fireMoreInfo: (id) =>
+        this.dispatchEvent(
+          new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: id } }),
+        ),
+      navigate: (path) => {
+        window.history.pushState(null, "", path);
+        this.dispatchEvent(
+          new CustomEvent("location-changed", { bubbles: true, composed: true, detail: { replace: false } }),
+        );
+      },
+    });
+  }
+
+  // ---- popup ----------------------------------------------------------------
+
+  /**
+   * The card's own popup: any Lovelace card, in the shared popup chrome.
+   *
+   * An appliance's card is a summary — a state, a progress bar, a few buttons.
+   * The full set of controls (every programme, every option, the history) does
+   * not belong on a dashboard tile, but it does belong one tap away, which is
+   * what this is.
+   */
+  private _openPopup(): void {
+    if (!this._config?.popup) {
+      // Nothing configured: fall back to more-info rather than opening an empty
+      // dialog, the same as any action a card does not wire up.
+      this.dispatchEvent(
+        new CustomEvent("hass-more-info", {
+          bubbles: true,
+          composed: true,
+          detail: { entityId: this._config?.entity },
+        }),
+      );
+      return;
+    }
+    this._popupOpenedAt = Date.now();
+    this._popupOpen = true;
+  }
+
+  private _closePopup(): void {
+    this._popupOpen = false;
+    this._popupCardEl = undefined;
+    this._popupCard.reset();
+  }
+
+  // createCardElement() is async, so the build is driven from updated() and
+  // render() stays synchronous.
+  private _maybeSyncPopupCard(): void {
+    const popup = this._config?.popup;
+    if (!this._popupOpen || !popup || !this.hass) {
+      this._popupCard.reset();
+      return;
+    }
+    this._popupCard.sync({
+      skeleton: popup.content,
+      tokens: { entity_id: this._config?.entity, name: this._config?.name },
+      hass: this.hass,
+      onChange: (el) => {
+        this._popupCardEl = el;
+      },
+    });
+  }
+
+  private _renderPopup() {
+    const popup = this._config?.popup;
+    if (!this._popupOpen || !popup) return nothing;
+    return renderPopupDialog({
+      content: this._popupCardEl,
+      title: popup.title ?? this._config?.name,
+      size: popup.size,
+      onClose: () => this._closePopup(),
+      onBackdropClick: (e) => {
+        if (shouldCloseOnBackdropClick(e, this._popupOpenedAt)) this._closePopup();
+      },
+      closeLabel: this._t("dialog_close"),
+    });
   }
 
   /**
@@ -520,7 +622,10 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
       this._stopWaveLoop();
     }
 
-    const headerAction = cfg.tap_action ?? { action: "more-info" as const };
+    // A card with a popup configured opens it on tap, so the common case needs
+    // no `tap_action` at all; an explicit one still wins.
+    const headerAction =
+      cfg.tap_action ?? (cfg.popup ? { action: "popup" as const } : { action: "more-info" as const });
     const headerInteractive = isActionable(headerAction);
 
     return html`
@@ -557,6 +662,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
           ${this._layout.map((block) => this._renderBlock(block, progress))}
         </div>
       </ha-card>
+      ${this._renderPopup()}
     `;
   }
 
@@ -1089,6 +1195,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
   static styles = css`
     ${glassCardStyles}
     ${cardHeaderStyles}
+    ${popupCardStyles}
 
     ha-card {
       color: var(--m3p-text, var(--primary-text-color));

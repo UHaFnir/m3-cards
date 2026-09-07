@@ -4,6 +4,7 @@ import type {
   HaActionConfig,
   HomeAssistant,
   M3PresenceCardConfig,
+  PresencePersonPopupConfig,
   LovelaceCard,
   LovelaceCardEditor,
   LovelaceGridOptions,
@@ -31,7 +32,15 @@ import { renderCardHeader, cardHeaderStyles } from "./shared/card-header";
 import { shouldAnimate } from "./shared/animation";
 import { activateOnKey } from "./shared/a11y";
 import { discoverPersonEntities } from "./shared/ha-registry";
-import { handleAction, isActionable } from "./shared/actions";
+import { runHaAction, isActionable } from "./shared/actions";
+import { DetailCardController } from "./shared/detail-card";
+import {
+  renderPopupDialog,
+  syncDialogOpenState,
+  shouldCloseOnBackdropClick,
+  popupCardStyles,
+  type PopupCardHandle,
+} from "./shared/popup-card";
 import { localize, type TranslationKey } from "./localize";
 import { formatNumber } from "./shared/formatting";
 import { discoveryChangeMatters } from "./shared/should-update";
@@ -61,6 +70,9 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
 
   @state() private _config?: M3PresenceCardConfig;
   @state() private _discovered: string[] = [];
+  /** The person whose popup is open, or undefined for none. */
+  @state() private _popupFor?: string;
+  @state() private _popupCardEl?: HTMLElement & PopupCardHandle;
 
   @query(".map-wrap") private _mapWrapEl?: HTMLDivElement;
 
@@ -68,6 +80,8 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
   private _lastDiscoverKey?: string;
   private _holdTimer?: number;
   private _holdFired = false;
+  private _popupOpenedAt = 0;
+  private readonly _popupCard = new DetailCardController();
   private _mapCardEl?: HTMLElement & { hass?: HomeAssistant; setConfig?: (c: unknown) => void };
   private _mapEntityKey?: string;
 
@@ -109,6 +123,12 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
     super.updated(changed);
     this._maybeDiscover();
     this._syncMapCard();
+    this._maybeSyncPopupCard();
+    if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
+    if (changed.has("_popupFor")) {
+      const dialog = this.renderRoot?.querySelector("dialog") as HTMLDialogElement | null;
+      syncDialogOpenState(dialog, !!this._popupFor);
+    }
   }
 
   private _syncMapCard(): void {
@@ -262,6 +282,23 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
     return this._t("since_days").replace("{n}", String(days));
   }
 
+  private _popupConfigFor(entityId: string): PresencePersonPopupConfig | undefined {
+    return this._config?.person_popups?.[entityId];
+  }
+
+  /**
+   * What a tap runs when the config says nothing.
+   *
+   * A person with a `person_popups` entry opens it, which is the whole point of
+   * having written one — requiring `tap_action: {action: popup}` alongside it
+   * would be a second thing to remember that could only ever be set one way.
+   * Everyone else keeps the more-info a tap has always opened, so adding a
+   * popup for one person does not change what tapping the others does.
+   */
+  private _defaultTapAction(entityId: string): HaActionConfig {
+    return this._popupConfigFor(entityId) ? { action: "popup" } : { action: "more-info" };
+  }
+
   /**
    * Runs one of the card's actions against the person that was pressed.
    *
@@ -271,11 +308,82 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
    * its own all land on the person actually pressed rather than on some entity
    * named once in the config.
    *
-   * With no `tap_action` set, `handleAction` falls back to `more-info` on that
-   * entity, which is what a tap has always done.
+   * `runHaAction` rather than `handleAction` because only the former knows the
+   * `popup` kind; the branches the two share behave identically.
    */
   private _runAction(action: HaActionConfig | undefined, entityId: string): void {
-    handleAction(this, this.hass, action, entityId);
+    if (!this.hass) return;
+    runHaAction(this.hass, action, {
+      entityId,
+      openPopup: () => this._openPopup(entityId),
+      fireMoreInfo: (id) =>
+        this.dispatchEvent(
+          new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: id } }),
+        ),
+      navigate: (path) => {
+        window.history.pushState(null, "", path);
+        this.dispatchEvent(
+          new CustomEvent("location-changed", { bubbles: true, composed: true, detail: { replace: false } }),
+        );
+      },
+    });
+  }
+
+  private _openPopup(entityId: string): void {
+    // Nothing configured for this person: a `popup` action someone set on the
+    // whole card should still do something sensible for the people it has no
+    // popup for, rather than opening an empty dialog.
+    if (!this._popupConfigFor(entityId)) {
+      this.dispatchEvent(
+        new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } }),
+      );
+      return;
+    }
+    this._popupOpenedAt = Date.now();
+    this._popupFor = entityId;
+  }
+
+  private _closePopup(): void {
+    this._popupFor = undefined;
+    this._popupCardEl = undefined;
+    this._popupCard.reset();
+  }
+
+  // Drives the async card build — createCardElement() is a promise, and
+  // render() has to stay synchronous.
+  private _maybeSyncPopupCard(): void {
+    const entityId = this._popupFor;
+    const popup = entityId ? this._popupConfigFor(entityId) : undefined;
+    if (!entityId || !popup || !this.hass) {
+      this._popupCard.reset();
+      return;
+    }
+    const row = this._buildRows().find((r) => r.entityId === entityId);
+    this._popupCard.sync({
+      skeleton: popup.content,
+      tokens: { entity_id: entityId, name: row?.name },
+      hass: this.hass,
+      onChange: (el) => {
+        this._popupCardEl = el;
+      },
+    });
+  }
+
+  private _renderPopup() {
+    const entityId = this._popupFor;
+    const popup = entityId ? this._popupConfigFor(entityId) : undefined;
+    if (!entityId || !popup) return nothing;
+    const row = this._buildRows().find((r) => r.entityId === entityId);
+    return renderPopupDialog({
+      content: this._popupCardEl,
+      title: popup.title ?? row?.name,
+      size: popup.size,
+      onClose: () => this._closePopup(),
+      onBackdropClick: (e) => {
+        if (shouldCloseOnBackdropClick(e, this._popupOpenedAt)) this._closePopup();
+      },
+      closeLabel: this._t("dialog_close"),
+    });
   }
 
   private _handlePointerDown(row: PersonRow): (e: PointerEvent) => void {
@@ -298,7 +406,7 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
         window.clearTimeout(this._holdTimer);
         this._holdTimer = undefined;
       }
-      if (!this._holdFired) this._runAction(this._config?.tap_action, row.entityId);
+      if (!this._holdFired) this._runAction(this._config?.tap_action ?? this._defaultTapAction(row.entityId), row.entityId);
     };
   }
 
@@ -384,6 +492,7 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
           ${this._config.show_map && rows.length > 0 ? html`<div class="map-wrap"></div>` : nothing}
         </div>
       </ha-card>
+      ${this._renderPopup()}
     `;
   }
 
@@ -411,7 +520,7 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
             this._holdTimer = undefined;
           }
         }}
-        @keydown=${activateOnKey(() => this._runAction(this._config?.tap_action, row.entityId))}
+        @keydown=${activateOnKey(() => this._runAction(this._config?.tap_action ?? this._defaultTapAction(row.entityId), row.entityId))}
       >
         <div class="avatar-wrap">
           <div class="avatar" style=${picture ? `background-image: url(${picture});` : ""}>
@@ -437,6 +546,7 @@ export class M3PresenceCard extends TemplatedCard(LitElement) implements Lovelac
   static styles = [
     glassCardStyles,
     cardHeaderStyles,
+    popupCardStyles,
     css`
       .presence-chip {
         flex-shrink: 0;

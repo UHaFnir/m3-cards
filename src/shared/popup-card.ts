@@ -1,4 +1,5 @@
-import { html, css, type TemplateResult } from "lit";
+import { html, css, nothing, type TemplateResult } from "lit";
+import type { PopupSize } from "../types";
 
 // A card-defined popup: holding a tile opens a `<dialog>` containing another
 // instance of the *same* card, re-scoped to just that tile (e.g. one room's
@@ -62,11 +63,18 @@ export function renderPopupDialog(params: {
   onClose: () => void;
   onBackdropClick: (e: Event) => void;
   closeLabel: string;
+  /** Optional heading in the top bar, beside the close button. Without one the
+   * bar stays the narrow close-button strip it has always been. */
+  title?: string;
+  /** Defaults to `normal`, which is the width every popup had before this was
+   * configurable. */
+  size?: PopupSize;
 }): TemplateResult {
   return html`
-    <dialog @close=${params.onClose} @click=${params.onBackdropClick}>
+    <dialog data-size=${params.size ?? "normal"} @close=${params.onClose} @click=${params.onBackdropClick}>
       <div class="popup-chrome">
-        <div class="popup-topbar">
+        <div class="popup-topbar ${params.title ? "has-title" : ""}">
+          ${params.title ? html`<h2 class="popup-title">${params.title}</h2>` : nothing}
           <button class="popup-close" @click=${params.onClose} aria-label=${params.closeLabel}>
             <ha-icon icon="mdi:close"></ha-icon>
           </button>
@@ -89,8 +97,19 @@ export const popupCardStyles = css`
     overflow: visible;
   }
 
+  /* Content that needs more room than the default sheet. "normal" is left to
+     the rule above, so nothing that never sets a size changes. */
+  dialog[data-size="wide"] {
+    max-width: min(860px, 94vw);
+  }
+
+  dialog[data-size="fullscreen"] {
+    max-width: 100vw;
+    max-height: 100dvh;
+  }
+
   @media (max-width: 600px) {
-    dialog {
+    dialog:not([data-size="fullscreen"]) {
       max-width: 94vw;
     }
   }
@@ -108,7 +127,9 @@ export const popupCardStyles = css`
   .popup-chrome {
     display: flex;
     flex-direction: column;
-    max-height: 85dvh;
+    /* Inherited rather than repeated, so a fullscreen dialog's chrome grows
+       with it instead of staying capped at the default sheet height. */
+    max-height: inherit;
     border-radius: 24px;
     overflow: hidden;
     /* Without this the topbar is transparent, so the close button reads as
@@ -122,6 +143,27 @@ export const popupCardStyles = css`
     display: flex;
     justify-content: flex-end;
     padding: 6px 6px 0;
+  }
+
+  /* With a title the strip becomes a real header row: the title takes the
+     space and the close button stays pinned to its end. */
+  .popup-topbar.has-title {
+    align-items: center;
+    gap: 8px;
+    padding: 10px 6px 2px 16px;
+  }
+
+  .popup-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--primary-text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .popup-body {
