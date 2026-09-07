@@ -1996,3 +1996,26 @@ export const APPLIANCE_NARROW_PX = HUMIDIFIER_NARROW_PX;
 
 /** Colours handed to option pills and buttons that configure none. */
 export const APPLIANCE_PALETTE = HUMIDIFIER_MODE_PALETTE;
+// ---- Search -----------------------------------------------------------------
+// Measurements from the Material 3 search bar in its resting state: a 56px-tall
+// fully-rounded container, a 24px leading icon inset 16px from the edge, and
+// trailing icon buttons on a 40px target so their 24px glyph lands on the same
+// 16px inset at the other end. The pill shape falls out of the suite's own
+// scale rather than being asserted: half of 56 is 28, which is RADIUS.card.
+export const DEFAULT_SEARCH_RADIUS = RADIUS.card;
+export const SEARCH_BAR_HEIGHT = 56;
+export const SEARCH_ICON_SIZE = 24;
+export const SEARCH_ACTION_SIZE = 40;
+export const SEARCH_ACTION_RADIUS = SEARCH_ACTION_SIZE / 2;
+export const DEFAULT_SEARCH_ICON = "mdi:magnify";
+export const DEFAULT_SEARCH_ASSIST_ICON = "mdi:microphone";
+/** Well behind the trailing Assist button — the same weight as the heading
+ *  card's action button, which is the other "quiet button on a card" in the
+ *  suite. */
+export const SEARCH_ACTION_TINT = 8;
+/** The bar's own wash while a finger is down. Below the action tint, because
+ *  it covers the whole bar rather than a 40px button. */
+export const SEARCH_PRESSED_TINT = 6;
+/** How long the pressed wash stays after a tap that opens a dialog. The dialog
+ *  takes the focus, so without a timer the bar would stay lit behind it. */
+export const SEARCH_FEEDBACK_MS = 180;
