@@ -1319,6 +1319,27 @@ three presets, or a continuous slider with `color_temp_style: slider`.
 `show_color_temp: false` leaves it out entirely, which keeps the card
 short on views that hold many lights and only ever change brightness.
 
+### Compact
+
+`compact: true` drops the power button and makes the header icon the toggle
+instead — the split the native tile card makes, where the icon is the control
+and the rest of the header opens more-info.
+
+```yaml
+type: custom:m3-light-card
+entity: light.living_room
+compact: true
+```
+
+The point is horizontal room. The power button and the icon are two lit-up
+things at opposite ends of a header that is already carrying a name and a
+subtitle, and in a two-column grid that is the width the name loses first.
+The swatch already tints with the light's state, so it reads as the on/off
+control it has become without anything else being added.
+
+Everything else is unchanged: the brightness slider, the colour rows and the
+member list all still render, and the header still opens more-info.
+
 ### Configuration options
 
 | Option | Type | Default | Description |
@@ -1327,6 +1348,7 @@ short on views that hold many lights and only ever change brightness.
 | `name` | string | entity name | Displayed name |
 | `icon` | string | entity icon | Icon in the icon tile |
 | `transition` | number | – | Transition duration (seconds) for `light.turn_on` calls |
+| `compact` | boolean | `false` | Drop the power button and make the header icon the toggle instead |
 | `wave_style` | `wavy` \| `flat` | `wavy` | Slider wave shape |
 | `show_color_temp` | boolean | `true` | Show the color temperature row; `false` hides it even on a light that supports it |
 | `accent_color` / `track_color` / `handle_color` | string | theme default | Slider colors |

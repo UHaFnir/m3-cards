@@ -647,6 +647,12 @@ export interface M3LightCardConfig {
   icon?: string;
   transition?: number;
   show_members?: boolean;
+  /**
+   * Drops the power button and makes the header icon the toggle instead — the
+   * split the native tile card makes. Narrows what the card needs horizontally,
+   * which is the point when several sit side by side in a grid.
+   */
+  compact?: boolean;
   show_color_temp?: boolean;
   color_temp_style?: LightColorTempStyle;
   color_temp_presets?: LightColorTempPresets;

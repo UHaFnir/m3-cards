@@ -42,6 +42,7 @@ export class M3LightCardEditor extends LitElement implements LovelaceCardEditor 
       { name: "name", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
       { name: "transition", selector: { number: { min: 0, step: 0.1, mode: "box", unit_of_measurement: "s" } } },
+      { name: "compact", selector: { boolean: {} } },
       { name: "use_light_color", selector: { boolean: {} } },
       {
         name: "wave_style",
@@ -130,6 +131,7 @@ export class M3LightCardEditor extends LitElement implements LovelaceCardEditor 
       warm: "editor_light_color_temp_warm",
       neutral: "editor_light_color_temp_neutral",
       cold: "editor_light_color_temp_cold",
+      compact: "editor_light_compact",
       show_color_wheel: "editor_light_show_color_wheel",
       show_members: "editor_light_show_members",
       service: "editor_light_scene_service",
@@ -275,6 +277,7 @@ export class M3LightCardEditor extends LitElement implements LovelaceCardEditor 
       name: this._config.name,
       icon: this._config.icon,
       transition: this._config.transition,
+      compact: this._config.compact ?? false,
       use_light_color: this._config.use_light_color ?? true,
       wave_style: this._config.wave_style ?? "wavy",
     };

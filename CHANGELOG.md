@@ -8,6 +8,21 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ### Added
 
+- **A compact mode for the light card**, via `compact: true`. It drops the power
+  button and makes the header icon the toggle instead — the split the native
+  tile card makes, where the icon is the control and the rest of the header
+  opens more-info.
+
+  The point is horizontal room. The power button and the icon are two lit-up
+  things at opposite ends of a header already carrying a name and a subtitle,
+  and in a two-column grid that is the width the name loses first. The swatch
+  already tints with the light's state, so it reads as the control it has
+  become without anything else being added. Everything else is unchanged.
+
+  `renderCardHeader` grew an optional `onIconClick` for this, so any card can
+  give its icon its own action; without one the swatch stays decoration and the
+  whole header runs `onClick`, exactly as before.
+
 - **Jinja2 templates in every card's own string fields.** A field containing
   `{{` or `{%` — a name, an icon, a colour, whatever that card reads out of its
   config — is now subscribed over Home Assistant's `render_template` websocket
@@ -225,6 +240,22 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   `config_entry_id` on a dashboard with more than one NAS.
 
 ### Hinzugefügt
+
+- **Ein Kompaktmodus für die Lichtkarte**, über `compact: true`. Er lässt den
+  Ein/Aus-Knopf weg und macht stattdessen das Symbol in der Kopfzeile zum
+  Schalter — dieselbe Aufteilung wie bei der nativen Tile-Karte: das Symbol
+  schaltet, der Rest der Kopfzeile öffnet die Detailansicht.
+
+  Es geht um Platz in der Breite. Knopf und Symbol sind zwei leuchtende Dinge
+  an den beiden Enden einer Kopfzeile, die schon Name und Untertitel trägt —
+  und in einem zweispaltigen Raster verliert der Name diese Breite zuerst. Die
+  Symbolfläche färbt sich ohnehin mit dem Zustand des Lichts und liest sich
+  damit als das Bedienelement, das sie geworden ist. Sonst ändert sich nichts.
+
+  `renderCardHeader` hat dafür ein optionales `onIconClick` bekommen, sodass
+  jede Karte ihrem Symbol eine eigene Aktion geben kann; ohne eine bleibt die
+  Fläche Dekoration und die ganze Kopfzeile führt `onClick` aus, genau wie
+  bisher.
 
 - **Jinja2-Templates in allen eigenen Textfeldern jeder Karte.** Ein Feld mit
   `{{` oder `{%` — Name, Icon, Farbe, was die Karte eben aus ihrer

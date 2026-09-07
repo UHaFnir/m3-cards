@@ -502,6 +502,7 @@ export class M3LightCard extends TemplatedCard(LitElement) implements LovelaceCa
     this._unavailable = unavailable;
     const isOn = entity.state === "on";
     const effectiveOn = isOn || this._dragging;
+    const compact = this._config.compact === true;
 
     const modes: string[] = entity.attributes.supported_color_modes ?? [];
     const hasBrightness =
@@ -595,19 +596,30 @@ export class M3LightCard extends TemplatedCard(LitElement) implements LovelaceCa
             name,
             subtitle,
             onClick: () => this._fireMoreInfo(),
-            right: html`
-              <button
-                class="power-btn ${effectiveOn ? "active" : ""}"
-                ?disabled=${unavailable}
-                aria-label="mdi:power"
-                @click=${(e: Event) => {
-                  e.stopPropagation();
-                  this._handlePowerToggle();
-                }}
-              >
-                <ha-icon icon="mdi:power"></ha-icon>
-              </button>
-            `,
+            // Compact drops the power button and moves the toggle onto the icon
+            // — the same split the native tile card makes. The swatch already
+            // tints with the light's state, so it reads as the on/off control
+            // it has become without a second lit-up thing beside it.
+            ...(compact
+              ? {
+                  onIconClick: unavailable ? undefined : () => this._handlePowerToggle(),
+                  iconLabel: name,
+                }
+              : {
+                  right: html`
+                    <button
+                      class="power-btn ${effectiveOn ? "active" : ""}"
+                      ?disabled=${unavailable}
+                      aria-label="mdi:power"
+                      @click=${(e: Event) => {
+                        e.stopPropagation();
+                        this._handlePowerToggle();
+                      }}
+                    >
+                      <ha-icon icon="mdi:power"></ha-icon>
+                    </button>
+                  `,
+                }),
           })}
           ${hasBrightness ? this._renderWaveSlider(displayPct, unavailable) : nothing}
           ${this._config.show_color_temp !== false && supportsColorTemp
