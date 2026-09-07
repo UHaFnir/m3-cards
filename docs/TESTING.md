@@ -54,7 +54,7 @@ Beide Fehler ließen die Seite besser aussehen, als sie war.
 - Ein Handy oder ein per DevTools emuliertes Touch-Gerät für alle Drag-Interaktionen
   (Wave-Slider, Wischen) — Maus-Events allein decken `touch-action`-Konflikte nicht ab.
 
-## Cross-Cutting-Checkliste (für jede der 40 Karten)
+## Cross-Cutting-Checkliste (für jede der 41 Karten)
 
 Diese Punkte gelten kartenübergreifend, weil sie über gemeinsame `shared/*`-Module
 implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichzeitig.
@@ -809,14 +809,17 @@ kleiner konfigurierte Kachel angehoben und nicht abgeschnitten wird.
 1. Alle Cross-Cutting-Punkte (C1–C15) auf mindestens 3 unterschiedlichen Karten
    durchgehen (eine einfache, eine mit Editor-Unterinhalten wie Battery/Power-List,
    eine mit Animation wie Progress/Light).
-2. Jede der 40 Karten mindestens einmal mit einer Minimal-Config und einmal mit
+2. Jede der 41 Karten mindestens einmal mit einer Minimal-Config und einmal mit
    einer voll ausgereizten Config (alle Farben/Optionen gesetzt) rendern.
 3. `CHANGELOG.md` gegen die tatsächlich getesteten Änderungen abgleichen.
-4. Die Kartenzahl an allen fünf Stellen abgleichen, an denen sie steht: beide
-   READMEs, `package.json`, die Punkte 1 und 2 dieser Liste — und die
+4. Die Kartenzahl an allen vier Stellen abgleichen, an denen sie steht:
+   `README.md`, die `description` in `package.json`, die Überschrift der
+   Cross-Cutting-Checkliste zusammen mit Punkt 2 dieser Liste — und die
    **Beschreibung des GitHub-Repos**, die in keiner Datei liegt und deshalb bei
    jedem Release übersehen wird. Sie stand bei 2.3 noch auf 29, sieben Karten
    und vier Releases zu spät:
    `gh repo edit j0sp0r/m3-cards --description "…"`
+   Gegenprobe, statt zu zählen:
+   `grep -rho 'type: "m3-[a-z0-9-]*"' src/*.ts | grep -v editor | sort -u | wc -l`
 5. `CARD_VERSION` in `src/const.ts` und `version` in `package.json` auf die neue
    Nummer setzen. Beides passiert erst zum Release, nicht während der Arbeit.
