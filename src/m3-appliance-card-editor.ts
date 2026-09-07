@@ -555,6 +555,7 @@ export class M3ApplianceCardEditor extends LitElement implements LovelaceCardEdi
               .computeLabel=${this._computeLabel}
               @value-changed=${this._valueChanged}
             ></ha-form>
+            <div class="hint">${this._t("editor_appliance_popup_hint")}</div>
           </div>
         </ha-expansion-panel>
 

@@ -1999,6 +1999,8 @@ const translations = {
     editor_appliance_entity: "Status-Entität",
     editor_appliance_entity_hint:
       "Die Entität, die sagt, was das Gerät gerade tut — meist ein Sensor mit dem Betriebszustand.",
+    editor_appliance_popup_hint:
+      "Mit „popup“ (nur YAML) öffnet ein Tipp ein eigenes Popup mit einer beliebigen Karte darin statt der Detailansicht — für alles, was auf der Kachel keinen Platz hat.",
     editor_appliance_attribute: "Attribut statt Zustand",
     editor_appliance_states: "Statustexte",
     editor_appliance_states_hint:
@@ -4065,6 +4067,8 @@ const translations = {
     editor_appliance_entity: "Status entity",
     editor_appliance_entity_hint:
       "The entity that says what the appliance is doing — usually a sensor holding its operation state.",
+    editor_appliance_popup_hint:
+      "\"popup\" (YAML only) makes a tap open a popup with any card inside it instead of more-info — for everything that does not fit on the tile.",
     editor_appliance_attribute: "Attribute instead of state",
     editor_appliance_states: "Status texts",
     editor_appliance_states_hint:
