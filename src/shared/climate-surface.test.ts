@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { resolveSetpointSurface } from "./climate-surface";
+import { foregroundOn } from "./color-config";
+import { contrastRatio, parseColor } from "./contrast";
 import {
+  MODE_PILL_INK_TARGET,
   MODE_PILL_LINE_PERCENT,
   MODE_PILL_WASH_PERCENT,
+  SETPOINT_INK_TARGET,
   SETPOINT_LINE_PERCENT,
   SETPOINT_WASH_PERCENT,
 } from "../const";
@@ -61,6 +65,27 @@ describe("resolveSetpointSurface", () => {
     expect(s.bg).toContain("var(--primary-color)");
     expect(s.line).toContain("var(--primary-color)");
     expect(s.ink).toBe("var(--primary-color)");
+  });
+
+  it("holds the mode pill's ink to the small-text floor, not the graphics one", () => {
+    // What the two ovals carry differs: a 22px numeral in the setpoint, a 13px
+    // label in the mode pill. `test/contrast-audit.js` reported the mode
+    // button at 3.01-3.23 in the light theme because both were corrected to 3.
+    //
+    // The wash below is the light-theme surface that run measured behind the
+    // heat pill. It is written out rather than taken from
+    // `resolveSetpointSurface` because without a DOM `tintOn` cannot mix
+    // against a real surface, so the ink recipe is checked where it is decided.
+    const wash = "#feefee";
+    const gegen = (css: string) =>
+      contrastRatio(parseColor(css)!, parseColor(wash)!);
+
+    expect(gegen(foregroundOn(HEAT, wash, SETPOINT_INK_TARGET))).toBeLessThan(
+      MODE_PILL_INK_TARGET,
+    );
+    expect(
+      gegen(foregroundOn(HEAT, wash, MODE_PILL_INK_TARGET)),
+    ).toBeGreaterThanOrEqual(MODE_PILL_INK_TARGET);
   });
 
   it("is stable for the same inputs", () => {
