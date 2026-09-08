@@ -97,6 +97,15 @@ implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichze
 | Band-Sollwerte eingefärbt | Thermostat im Modus `heat_cool` (zwei Sollwerte) | „Heizen bis“ steht in der Heizfarbe, „Kühlen ab“ in der Kühlfarbe. Beide Zahlen auf hellem **und** dunklem Theme lesbar — die Farben werden gegen die echte Fläche korrigiert, sind also nicht in beiden Themes derselbe Hex |
 | Band-Farben folgen `mode_colors` | `mode_colors.heat` und `mode_colors.cool` auf eigene Farben setzen, Modus `heat_cool` | Die beiden Sollwert-Zahlen übernehmen den Override, nicht die Palette. Es gibt keine zweite Option dafür |
 | Band ohne Wert | Sollwert fehlt oder Entität ist `unavailable` | Statt einer gefärbten Zahl steht „–“ in der normalen Textfarbe, nicht in Heiz- oder Kühlfarbe |
+| `style: "expressive"` | Stil auf `expressive` umstellen | Aktuelle Temperatur wird zur dominanten, fetten Figur, Zielwert als eine verbundene Stepper-Zeile (rund außen, eckig innen), Modus-Zeile wird zu einem Modus-Button |
+| Modus-Dropdown (expressive) | Entität mit mehr als zwei `hvac_modes`, Modus-Button antippen | Dropdown öffnet **über** der Karte (nicht abgeschnitten, nicht hinter der nächsten Karte), Auswahl ruft `climate.set_hvac_mode` |
+| Modus-Button bei zwei Modi | `hidden_modes` so setzen, dass nur zwei Modi bleiben, Button antippen | Kein Menü — Tippen schaltet direkt auf den anderen Modus um |
+| Dropdown beim Verlassen | Menü öffnen, dann View wechseln bzw. Karteneditor schließen | Menü verschwindet mit der Karte, bleibt nicht auf `document.body` zurück |
+| Modus-/Preset-Pille morpht | Modus- oder Preset-Button gedrückt halten bzw. Dropdown öffnen | Radius verengt sich sichtbar (19px → 12px), federt beim Loslassen zurück |
+| Heiz-/Kühl-Rahmen | Entität mit `hvac_action: heating` vs. `idle` bei `hvac_mode: heat` | Rahmen voll bzw. gedämpft; bei `off` kein Rahmen; `show_action_glow: false` schaltet ihn ganz ab |
+| Band-Thermostat (expressive) | Entität mit `target_temp_low`/`target_temp_high` (heat_cool), Stil `expressive` | Zwei gestapelte verbundene Stepper-Zeilen mit Beschriftung „Heizen bis“/„Kühlen ab“ |
+| `show_control_labels: false` | Flag setzen (expressive) | Modus- und Preset-Button werden zu Icon-Kreisen |
+| `show_header_status: false` | Flag setzen (beide Stile) | Modus-Zeile unter dem Kartennamen verschwindet |
 
 ## M3 Climate Card Mini
 

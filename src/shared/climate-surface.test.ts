@@ -1,0 +1,71 @@
+import { describe, it, expect } from "vitest";
+import { resolveSetpointSurface } from "./climate-surface";
+import {
+  MODE_PILL_LINE_PERCENT,
+  MODE_PILL_WASH_PERCENT,
+  SETPOINT_LINE_PERCENT,
+  SETPOINT_WASH_PERCENT,
+} from "../const";
+
+// These run without a DOM, so `tintOn` cannot measure against a real surface
+// and falls back to handing the mix to the browser as CSS. That fallback is
+// the interesting contract here: the percentages still have to arrive in the
+// right place, and a colour that cannot be resolved must degrade to a
+// color-mix() the browser can finish rather than to a broken value.
+const HEAT = "#e57368";
+
+describe("resolveSetpointSurface", () => {
+  it("washes the surface at the wash percentage and draws the outline at the line percentage", () => {
+    const s = resolveSetpointSurface(
+      undefined,
+      HEAT,
+      undefined,
+      SETPOINT_WASH_PERCENT,
+      SETPOINT_LINE_PERCENT,
+    );
+    expect(s.bg).toContain(`${HEAT} ${SETPOINT_WASH_PERCENT}%`);
+    expect(s.line).toContain(`${HEAT} ${SETPOINT_LINE_PERCENT}%`);
+  });
+
+  it("keeps the mode pill quieter than the setpoint oval", () => {
+    // The setpoint carries the value, so it must stay the louder of the two
+    // ovals — if these constants ever cross, the card's hierarchy inverts.
+    expect(MODE_PILL_WASH_PERCENT).toBeLessThan(SETPOINT_WASH_PERCENT);
+    expect(MODE_PILL_LINE_PERCENT).toBeLessThan(SETPOINT_LINE_PERCENT);
+  });
+
+  it("applies a per-card opacity override to the wash only, never to the outline", () => {
+    // plus_opacity/minus_opacity-style overrides are about the fill; letting
+    // one drag the hairline along would turn the ring into a solid band.
+    const s = resolveSetpointSurface(
+      undefined,
+      HEAT,
+      40,
+      SETPOINT_WASH_PERCENT,
+      SETPOINT_LINE_PERCENT,
+    );
+    expect(s.bg).toContain(`${HEAT} 40%`);
+    expect(s.line).toContain(`${HEAT} ${SETPOINT_LINE_PERCENT}%`);
+  });
+
+  it("passes a theme custom property through for the browser to resolve", () => {
+    // A theme colour is not parseable here; handing back the var() untouched
+    // is what keeps a themed card from falling back to a hardcoded colour.
+    const s = resolveSetpointSurface(
+      undefined,
+      "var(--primary-color)",
+      undefined,
+      SETPOINT_WASH_PERCENT,
+      SETPOINT_LINE_PERCENT,
+    );
+    expect(s.bg).toContain("var(--primary-color)");
+    expect(s.line).toContain("var(--primary-color)");
+    expect(s.ink).toBe("var(--primary-color)");
+  });
+
+  it("is stable for the same inputs", () => {
+    const a = resolveSetpointSurface(undefined, HEAT, undefined, 9, 34);
+    const b = resolveSetpointSurface(undefined, HEAT, undefined, 9, 34);
+    expect(a).toEqual(b);
+  });
+});
