@@ -12,5 +12,6 @@
 - [ ] `npm run build` passes
 - [ ] Tested manually in a real Home Assistant dashboard (see `docs/TESTING.md`)
 - [ ] `prefers-reduced-motion` respected for any new animation
-- [ ] README.md updated if config options changed (English only — there is no
-      second-language README any more)
+- [ ] `docs/cards/<card>.md` updated if config options changed, then
+      `npm run docs` run to regenerate README.md (CI fails on a dirty tree
+      otherwise)

@@ -812,14 +812,17 @@ kleiner konfigurierte Kachel angehoben und nicht abgeschnitten wird.
 2. Jede der 41 Karten mindestens einmal mit einer Minimal-Config und einmal mit
    einer voll ausgereizten Config (alle Farben/Optionen gesetzt) rendern.
 3. `CHANGELOG.md` gegen die tatsächlich getesteten Änderungen abgleichen.
-4. Die Kartenzahl an allen vier Stellen abgleichen, an denen sie steht:
-   `README.md`, die `description` in `package.json`, die Überschrift der
-   Cross-Cutting-Checkliste zusammen mit Punkt 2 dieser Liste — und die
-   **Beschreibung des GitHub-Repos**, die in keiner Datei liegt und deshalb bei
-   jedem Release übersehen wird. Sie stand bei 2.3 noch auf 29, sieben Karten
-   und vier Releases zu spät:
+4. Die Kartenzahl abgleichen. Zwei der vier Stellen zählen sich seit der
+   Doku-Generierung selbst: `README.md` und die `description` in `package.json`
+   bekommen sie von `npm run docs` aus der Zahl der `docs/cards/*.md`, und der
+   CI-Step "Docs up to date" schlägt fehl, wenn jemand sie von Hand verstellt.
+   Von Hand bleiben die Überschrift der Cross-Cutting-Checkliste zusammen mit
+   Punkt 2 dieser Liste — und die **Beschreibung des GitHub-Repos**, die in
+   keiner Datei liegt und deshalb bei jedem Release übersehen wird. Sie stand
+   bei 2.3 noch auf 29, sieben Karten und vier Releases zu spät:
    `gh repo edit j0sp0r/m3-cards --description "…"`
-   Gegenprobe, statt zu zählen:
+   Gegenprobe, statt zu zählen — die Zahl muss der entsprechen, die
+   `npm run docs` am Ende ausgibt:
    `grep -rho 'type: "m3-[a-z0-9-]*"' src/*.ts | grep -v editor | sort -u | wc -l`
 5. `CARD_VERSION` in `src/const.ts` und `version` in `package.json` auf die neue
    Nummer setzen. Beides passiert erst zum Release, nicht während der Arbeit.
