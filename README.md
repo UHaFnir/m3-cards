@@ -246,6 +246,9 @@ mode_colors:
 
 ### The `ecosee` style
 
+<img src="docs/images/climate-card-ecosee.png" alt="Climate Card: tiles vs ecosee style (light theme)" width="640">
+<img src="docs/images/climate-card-ecosee-dark.png" alt="Climate Card: tiles vs ecosee style (dark theme)" width="640">
+
 `style: ecosee` re-draws the same card around a different idea, borrowed from
 the ecosee reference thermostat: instead of a row of mode pills over a sensor
 row and a stepper, the **current** temperature becomes one dominant figure, and
