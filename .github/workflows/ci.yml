@@ -7,6 +7,12 @@ on:
 
 jobs:
   build:
+    # CI installs dependencies and runs repo scripts, including the docs
+    # generator. None of that needs to write anything back, and on a push to
+    # main the default token would be read-write — so it is narrowed here
+    # rather than left to the repo-wide default.
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
