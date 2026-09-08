@@ -15,9 +15,9 @@ const CATEGORY_HEADINGS = {
 const TABLE_HEADER = '| Card | Type | What it does |';
 const CATEGORY_ORDER = Object.keys(CATEGORY_HEADINGS);
 
-function parseFrontmatter(content) {
+function parseFrontmatter(content, file) {
   const m = content.match(/^---\n([\s\S]+?)\n---\n\n?([\s\S]*)$/);
-  if (!m) throw new Error('missing frontmatter');
+  if (!m) throw new Error(`docs/cards/${file}: missing frontmatter`);
   const fm = {};
   for (const line of m[1].split('\n')) {
     const idx = line.indexOf(': ');
@@ -34,9 +34,41 @@ function anchor(title) {
 // --- load every card doc ---
 const cardFiles = readdirSync('docs/cards').filter((f) => f.endsWith('.md'));
 const cards = cardFiles.map((f) => {
-  const { fm, body } = parseFrontmatter(readFileSync(`docs/cards/${f}`, 'utf8'));
-  return { ...fm, body };
+  const { fm, body } = parseFrontmatter(readFileSync(`docs/cards/${f}`, 'utf8'), f);
+  return { ...fm, file: f, body };
 });
+
+// --- the card count is only honest if the docs and the source agree ---
+// Everything downstream — the count in the README, the one in package.json,
+// the category tables — is derived from the files in docs/cards. That makes
+// the number reproducible, not correct: a card added to src/ with no doc
+// written for it would keep the count at whatever it was and CI would pass.
+// So the set of documented types is compared against the set the bundle
+// actually registers, by name rather than by count, since a card added in the
+// same run as one removed would otherwise cancel out.
+const registeredTypes = new Set();
+for (const f of readdirSync('src').filter((f) => f.endsWith('.ts'))) {
+  const src = readFileSync(`src/${f}`, 'utf8');
+  const at = src.indexOf('customCards.push(');
+  if (at === -1) continue;
+  const m = src.slice(at).match(/type:\s*["']([^"']+)["']/);
+  if (m) registeredTypes.add(m[1]);
+}
+const documentedTypes = new Set(cards.flatMap((c) => [c.type, c.also_type].filter(Boolean)));
+const undocumented = [...registeredTypes].filter((t) => !documentedTypes.has(t)).sort();
+const unregistered = [...documentedTypes].filter((t) => !registeredTypes.has(t)).sort();
+if (undocumented.length || unregistered.length) {
+  const lines = ['docs/cards is out of step with the cards src/ registers:'];
+  if (undocumented.length) {
+    lines.push(`  registered but undocumented: ${undocumented.join(', ')}`);
+    lines.push('    -> write docs/cards/<name>.md for it (copy an existing one for the frontmatter)');
+  }
+  if (unregistered.length) {
+    lines.push(`  documented but not registered: ${unregistered.join(', ')}`);
+    lines.push('    -> the card was renamed or removed; fix the doc\'s `type:` or delete it');
+  }
+  throw new Error(lines.join('\n'));
+}
 
 // --- section order: each card doc carries its own `section_order`
 // (position of its `## Title` heading in the README), independent of
@@ -49,6 +81,11 @@ const cardCount = cards.length + cards.filter((c) => c.also_type).length;
 const categoryTables = CATEGORY_ORDER.map((key) => ({ key, heading: CATEGORY_HEADINGS[key], entries: [] }));
 const tableByKey = new Map(categoryTables.map((t) => [t.key, t]));
 for (const card of cards) {
+  if (!tableByKey.has(card.category)) {
+    throw new Error(
+      `docs/cards/${card.file}: unknown category "${card.category}" — expected one of ${CATEGORY_ORDER.join(', ')}`,
+    );
+  }
   tableByKey.get(card.category).entries.push({
     order: Number(card.table_order),
     row: `| [${card.display}](#${anchor(card.title)}) | \`${card.type}\` | ${card.summary} |`,
