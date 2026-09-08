@@ -23,6 +23,36 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   give its icon its own action; without one the swatch stays decoration and the
   whole header runs `onClick`, exactly as before.
 
+- **An `ecosee` style for the M3 Climate Card.** `style: ecosee` re-draws the
+  card around the visual language of the ecosee reference thermostat: the
+  *current* temperature becomes one dominant, near-weightless figure, the
+  target becomes an outlined oval instead of a filled tile, the mode row
+  collapses into a single mode button, and a heat/cool frame around the card
+  reports the equipment. The default stays `tiles`, unchanged in every detail —
+  this is an opt-in second look, not a redesign of the existing one.
+
+  The frame has two strengths rather than one: full while the entity's
+  `hvac_action` reports `heating`/`cooling`, dimmed while heat or cool is the
+  selected mode but the equipment is idle. The second level is not cosmetic —
+  many integrations derive `hvac_action` from the physical valve, so a
+  Homematic eTRV reports `idle` for an entire summer with the mode set to heat,
+  and a frame that only lit on `heating` was invisible on that hardware.
+  Entities exposing no `hvac_action` at all keep the full frame from their mode
+  alone rather than sitting permanently dimmed on no evidence.
+  `show_action_glow: false` turns it off.
+
+  The mode button is the first consumer of `shared/dropdown-menu.ts`: it opens
+  the shared body-level menu when there is a real choice to make, and with two
+  modes left flips straight to the other one instead of opening a menu for a
+  binary switch. Two supporting modules keep the recipe in one place —
+  `shared/action-glow.ts` (the `hvac_action`/`hvac_mode` resolution plus the
+  frame's markup and CSS) and `shared/climate-surface.ts` (the outline-and-wash
+  oval and the dominant figure's typography), both measured against the real
+  theme surface so neither breaks on a light theme or over a wallpaper.
+
+  Also new, and available in both styles: `show_header_status` hides the mode
+  line under the card name.
+
 - **Jinja2 templates in every card's own string fields.** A field containing
   `{{` or `{%` — a name, an icon, a colour, whatever that card reads out of its
   config — is now subscribed over Home Assistant's `render_template` websocket
