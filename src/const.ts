@@ -61,6 +61,13 @@ export const SETPOINT_LINE_PERCENT = 34;
 export const MODE_PILL_LINE_PERCENT = 26;
 export const SETPOINT_BORDER_PX = 1;
 export const MODE_PILL_BORDER_PX = 1;
+// What the wash's ink has to reach. The setpoint oval holds a numeral drawn at
+// 22px, so the WCAG floor for large text/graphics applies; the mode pill holds
+// a 13px label, where 4.5 applies instead. Correcting both to 3 is what
+// `test/contrast-audit.js` caught on the mode button — its labels came back at
+// 3.01–3.23 in the light theme, i.e. exactly on a target that was too low.
+export const SETPOINT_INK_TARGET = 3;
+export const MODE_PILL_INK_TARGET = 4.5;
 
 // The dominant current-temperature figure. ecosee sizes it at 42cqw of a fixed
 // 460px canvas with nothing above it but a humidity line; this card also

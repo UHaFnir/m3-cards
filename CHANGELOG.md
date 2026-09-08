@@ -50,6 +50,12 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   oval and the dominant figure's typography), both measured against the real
   theme surface so neither breaks on a light theme or over a wallpaper.
 
+  The wash the mode button sits on carries a 13px label rather than a numeral,
+  so its ink is corrected to 4.5:1 and not to the 3:1 floor the setpoint oval's
+  figure takes. `test/contrast-audit.js` is what surfaced the difference: with
+  both corrected to 3, the mode labels came back at 3.01-3.23 in the light
+  theme, i.e. exactly on a target that was too low for their size.
+
   Also new, and available in both styles: `show_header_status` hides the mode
   line under the card name.
 

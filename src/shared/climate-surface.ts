@@ -28,6 +28,7 @@ import {
   HERO_TEMP_TRACKING,
   HERO_TEMP_WEIGHT,
   SETPOINT_BORDER_PX,
+  SETPOINT_INK_TARGET,
 } from "../const";
 import { tintOn, foregroundOn } from "./color-config";
 
@@ -48,17 +49,24 @@ export interface SetpointSurface {
 // a full-strength ring is what made the setpoint pill outshout the figure
 // above it, and mixing it against the real surface keeps it a hairline in both
 // a light and a dark theme instead of only one of them.
+//
+// `inkTarget` is the contrast ratio the ink is corrected to. It is a parameter
+// because what sits on the wash differs per caller: a 22px numeral takes the
+// graphics/large-text floor of 3, a 13px mode label takes 4.5. Passing the
+// wrong one is invisible in review and only shows up in an audit of the
+// rendered page — the mode button came back at 3.0 in the light theme.
 export function resolveSetpointSurface(
   host: HTMLElement | undefined,
   modeColor: string,
   opacity: number | undefined,
   defaultPercent: number,
   linePercent: number,
+  inkTarget: number = SETPOINT_INK_TARGET,
 ): SetpointSurface {
   const bg = tintOn(host, modeColor, opacity, defaultPercent);
   return {
     bg,
-    ink: foregroundOn(modeColor, bg),
+    ink: foregroundOn(modeColor, bg, inkTarget),
     line: tintOn(host, modeColor, undefined, linePercent),
   };
 }

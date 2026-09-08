@@ -29,6 +29,7 @@ import {
   DEFAULT_TEMP_STEP,
   DEFAULT_CLIMATE_RADIUS,
   MODE_PILL_BORDER_PX,
+  MODE_PILL_INK_TARGET,
   MODE_PILL_LINE_PERCENT,
   MODE_PILL_WASH_PERCENT,
   SETPOINT_LINE_PERCENT,
@@ -713,12 +714,16 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       SETPOINT_WASH_PERCENT,
       SETPOINT_LINE_PERCENT,
     );
+    // The mode pill differs from the setpoint oval in one respect that is not
+    // visible in the recipe: what it holds is a 13px label, not a numeral, so
+    // its ink is corrected to 4.5 rather than the graphics floor of 3.
     const modePill = resolveSetpointSurface(
       this,
       v.modeColor,
       undefined,
       MODE_PILL_WASH_PERCENT,
       MODE_PILL_LINE_PERCENT,
+      MODE_PILL_INK_TARGET,
     );
 
     // The dominant figure stays theme ink, not mode colour: the reference card
