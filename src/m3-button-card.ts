@@ -8,7 +8,6 @@ import type {
   LovelaceGridOptions,
   HaActionConfig,
   HassEntity,
-  ChipButtonsRowConfig,
 } from "./types";
 import {
   DEFAULT_BUTTON_COLOR,
@@ -38,7 +37,13 @@ import {
   inkOn,
 } from "./shared/color-config";
 import { TemplatedCard } from "./shared/templated-card";
-import { chipButtonsStyles, renderChipButtons } from "./shared/chip-buttons";
+import {
+  ChipRowFadeController,
+  chipButtonsStyles,
+  chipRowJustify,
+  embeddedChipRowConfig,
+  renderChipButtons,
+} from "./shared/chip-buttons";
 import { TapHoldGesture } from "./shared/gestures";
 
 const HOLD_DURATION_MS = 500;
@@ -68,6 +73,7 @@ export class M3ButtonCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _chipPressedKey?: string;
 
   private _chipGestures = new TapHoldGesture();
+  private _chipFades = new ChipRowFadeController();
 
   private _holdTimer?: number;
   private _holdTriggered = false;
@@ -108,6 +114,7 @@ export class M3ButtonCard extends TemplatedCard(LitElement) implements LovelaceC
     this._holdTimer = undefined;
     this._iconHoldTimer = undefined;
     this._chipGestures.cancel();
+    this._chipFades.disconnect();
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
@@ -536,6 +543,9 @@ export class M3ButtonCard extends TemplatedCard(LitElement) implements LovelaceC
   private _capsuleRadius = BUTTON_SHAPE_OFF_RADIUS;
 
   protected updated(): void {
+    // Runs before the shape measuring below bails out: a scrolling chip row
+    // needs its edge fades whether or not the shape follows the state.
+    this._chipFades.sync(this.renderRoot);
     if (this._config?.shape_by_state !== true) return;
     // A corner radius does not affect height, so re-rendering for a new
     // measurement cannot feed itself.
@@ -675,7 +685,7 @@ export class M3ButtonCard extends TemplatedCard(LitElement) implements LovelaceC
 
     const chipButtons = this._config.chip_buttons ?? [];
     const hasChipButtons = chipButtons.length > 0;
-    const chipRowConfig: ChipButtonsRowConfig = { buttons: chipButtons, wrap: true };
+    const chipRowConfig = embeddedChipRowConfig(this._config);
     const chipState = {
       pressedKey: this._chipPressedKey,
       gestures: this._chipGestures,
@@ -686,12 +696,7 @@ export class M3ButtonCard extends TemplatedCard(LitElement) implements LovelaceC
     // Only meaningful once the card is tall enough for the bottom chip bar
     // (see .chip-row-bottom's @container rule) — a normal-height card always
     // right-aligns the inline chip row regardless of this setting.
-    const chipJustify =
-      this._config.chip_buttons_justify === "start"
-        ? "flex-start"
-        : this._config.chip_buttons_justify === "center"
-          ? "center"
-          : "flex-end";
+    const chipJustify = chipRowJustify(this._config.chip_buttons_justify);
 
     return html`
       <ha-card
