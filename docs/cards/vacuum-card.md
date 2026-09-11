@@ -35,6 +35,24 @@ The suction pills draw four rising bars rather than spelling the level out.
 The names are vendor vocabulary — "Balanced", "Turbo", "Max+", "Custom" — which
 does not sort, does not translate consistently and does not fit a 42px pill.
 
+## Zooming the map
+
+A Roborock map arrives with wide transparent margins baked into the picture, so
+`contain` fits the whole canvas and the floor plan ends up a stamp in the middle
+of it. Rather than crop — which would hide rooms — the map can be **pinched,
+dragged and wheel-zoomed** in place. Double-tap toggles between 1× and 2×, and a
+button appears to go back.
+
+Two things make that safe on a dashboard. The element takes `touch-action:
+none`, so the browser does not pan the page underneath, and every pointer is
+also handed to `stopSwipe`, so `hass-swipe-navigation` does not read a sideways
+drag on the map as "next view". Both are needed: the CSS stops the browser, the
+shield stops the plugin's own listeners.
+
+A drag never counts as a tap, so letting go after panning does not also open
+more-info. At 1× a drag is left alone entirely and the dashboard scrolls as it
+always did.
+
 ## Folding it away
 
 `collapsible: true` gives the header a chevron that folds the map, the scales,
@@ -120,7 +138,9 @@ something.
 | `collapse_memory` | `device` \| `session` | `device` | Where the fold is remembered without a helper entity. |
 | `states` | list | — | Custom status texts. First match wins; each rule takes `value`/`regex`/`above`/`below` plus `label`, `icon`, `color`. |
 | `show_map` | boolean | `true` | The live map preview. |
-| `map_height` | number | `300` | Height of the map preview in px. The picture is letterboxed inside it, so this is what decides how large the floor plan reads. |
+| `map_height` | number | `360` | Height of the map preview in px. |
+| `map_zoom` | boolean | `true` | Pinch, drag and wheel zoom on the map; double-tap toggles 1×/2×. |
+| `map_max_zoom` | number | `4` | How far the pinch may go. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. |

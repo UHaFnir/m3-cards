@@ -2091,7 +2091,9 @@ export const VACUUM_MAP_RADIUS = 20;
  * floor plan actually looks. 220px left it a stamp in the middle of a lot of
  * nothing; `map_height` tunes it per card.
  */
-export const VACUUM_MAP_HEIGHT = 300;
+export const VACUUM_MAP_HEIGHT = 360;
+/** How far a pinch may go before it stops being a map and starts being pixels. */
+export const VACUUM_MAP_MAX_ZOOM = 4;
 export const VACUUM_MAP_CHIP_RADIUS = 9;
 /** Tied to the integration's own polling cadence — refreshing faster only
  *  re-fetches the same picture. */
@@ -2108,3 +2110,55 @@ export const VACUUM_WAVE_AMPLITUDE = 2.4;
 export const VACUUM_WAVE_WAVELENGTH = 20;
 export const VACUUM_WAVE_GAP = 8;
 export const VACUUM_WAVE_SVG_HEIGHT = 16;
+
+// ---- m3-vacuum-maintenance-card ---------------------------------------------
+// The list half of the vacuum pair. Its rows are the suite's list rows, so the
+// numbers come from the battery and power-list cards rather than a new scale.
+
+export const DEFAULT_VACUUM_MAINT_ICON = "mdi:tools";
+export const VACUUM_MAINT_ICON_SIZE = 44;
+export const VACUUM_MAINT_ICON_RADIUS = 16;
+
+export const VACUUM_PART_ROW_HEIGHT = 52;
+export const VACUUM_PART_ROW_RADIUS = 17;
+export const VACUUM_PART_ROW_TINT = 5;
+export const VACUUM_PART_ICON_SIZE = 30;
+export const VACUUM_PART_ICON_RADIUS = 11;
+export const VACUUM_PART_BAR_HEIGHT = 5;
+export const VACUUM_PART_BAR_RADIUS = 3;
+/** So a part at 0.4% is still a visible sliver rather than nothing at all. */
+export const VACUUM_PART_BAR_MIN_WIDTH = 5;
+
+/** Percent of service life left. Below the first it warns, below the second
+ *  it alerts — both configurable, because "soon" is a household opinion. */
+export const VACUUM_PART_WARN_BELOW = 25;
+export const VACUUM_PART_ALERT_BELOW = 10;
+
+/**
+ * Full service life per part, in hours, as Roborock documents it. Only used
+ * to draw the bar: the sensors report hours *left*, not a percentage, so
+ * without a total there is no fraction to fill. A part this table does not
+ * know draws no bar rather than a made-up one.
+ */
+export const VACUUM_PART_MAX_HOURS: Record<string, number> = {
+  main_brush: 300,
+  side_brush: 200,
+  filter: 150,
+  sensor: 30,
+  strainer: 150,
+  maintenance_brush: 300,
+};
+
+export const VACUUM_STATION_TILE_PADDING = 11;
+export const VACUUM_STATION_TILE_RADIUS = 18;
+export const VACUUM_STATION_TILE_RADIUS_ACTIVE = 11;
+export const VACUUM_STATION_ICON_SIZE = 30;
+export const VACUUM_STATION_ICON_RADIUS = 15;
+export const VACUUM_STATION_ICON_RADIUS_ACTIVE = 9;
+export const VACUUM_STATION_TINT = 11;
+
+export const VACUUM_STAT_PADDING = 11;
+export const VACUUM_STAT_RADIUS = 16;
+export const VACUUM_STAT_TINT = 5;
+export const VACUUM_STAT_VALUE_SIZE = 17;
+export const VACUUM_STAT_LABEL_SIZE = 9;

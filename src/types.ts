@@ -792,8 +792,16 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
   states?: StatusRule[];
 
   show_map?: boolean;
-  /** Height of the map preview in px. Defaults to 300. */
+  /** Height of the map preview in px. Defaults to 360. */
   map_height?: number;
+  /**
+   * Pinch, drag and wheel zoom on the map. On by default — a Roborock map
+   * carries wide transparent margins, so zooming in is how the floor plan
+   * fills the space it was given.
+   */
+  map_zoom?: boolean;
+  /** How far it may be zoomed. Defaults to 4×. */
+  map_max_zoom?: number;
   show_progress?: boolean;
   show_rooms?: boolean;
   show_fan_speed?: boolean;
@@ -834,6 +842,57 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
    * maintenance card belong one tap away rather than on the dashboard.
    */
   popup?: VacuumPopupConfig;
+  accent_color?: string;
+  accent_opacity?: number;
+  text_color?: string;
+  secondary_text_color?: string;
+  card_background?: string;
+  glass_background?: boolean;
+  animation?: "auto" | "on" | "off";
+  radius?: number;
+  corners?: CornerRadiusConfig;
+  card_version?: string;
+}
+
+export interface VacuumConsumableConfig {
+  /** Which part. Defaults cover Roborock's six; any other key needs `entity`. */
+  key?: string;
+  entity?: string;
+  name?: string;
+  icon?: string;
+  /** Full service life in hours, for the bar. Derived when the sensor says. */
+  max_hours?: number;
+}
+
+export interface M3VacuumMaintenanceCardConfig {
+  type: string;
+  /** The vacuum. Everything else is found on its device and its dock. */
+  entity: string;
+  name?: string;
+  icon?: string;
+
+  /** Overrides the automatic list entirely. */
+  consumables?: VacuumConsumableConfig[];
+  /** Percent of service life below which a part warns, then alerts. */
+  warn_below?: number;
+  alert_below?: number;
+
+  show_station?: boolean;
+  show_stats?: boolean;
+  show_settings?: boolean;
+  /**
+   * Long-press a part to reset its counter. Off by default, and greyed out
+   * when the reset button is disabled — which is how Home Assistant ships
+   * them.
+   */
+  show_reset?: boolean;
+
+  collapsible?: boolean;
+  default_collapsed?: boolean;
+  collapse_state_entity?: string;
+  collapse_memory?: CollapseMemory;
+
+  tap_action?: HaActionConfig;
   accent_color?: string;
   accent_opacity?: number;
   text_color?: string;
@@ -925,8 +984,16 @@ export interface M3PresenceCardConfig {
   show_distance?: boolean;
   show_since?: boolean;
   show_map?: boolean;
-  /** Height of the map preview in px. Defaults to 300. */
+  /** Height of the map preview in px. Defaults to 360. */
   map_height?: number;
+  /**
+   * Pinch, drag and wheel zoom on the map. On by default — a Roborock map
+   * carries wide transparent margins, so zooming in is how the floor plan
+   * fills the space it was given.
+   */
+  map_zoom?: boolean;
+  /** How far it may be zoomed. Defaults to 4×. */
+  map_max_zoom?: number;
   sort?: PresenceSortMode;
   home_color?: string;
   not_home_color?: string;

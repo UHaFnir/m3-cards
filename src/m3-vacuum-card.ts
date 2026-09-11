@@ -17,6 +17,7 @@ import {
   VACUUM_CHIP_RADIUS,
   VACUUM_MAP_CHIP_RADIUS,
   VACUUM_MAP_HEIGHT,
+  VACUUM_MAP_MAX_ZOOM,
   VACUUM_MAP_RADIUS,
   VACUUM_MAX_CHIPS,
   VACUUM_BATTERY_HEIGHT,
@@ -39,6 +40,8 @@ import {
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
 import { formatNumber } from "./shared/formatting";
+import { PanZoom, type PanZoomState, PAN_ZOOM_IDENTITY } from "./shared/pan-zoom";
+import { stopSwipe } from "./shared/swipe";
 import { activateOnKey } from "./shared/a11y";
 import { STANDARD_EASING } from "./shared/animation";
 import {
@@ -116,6 +119,18 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _popupCardEl?: HTMLElement & PopupCardHandle;
   private _popupOpenedAt = 0;
   private readonly _popupCard = new DetailCardController();
+  @state() private _mapView: PanZoomState = { ...PAN_ZOOM_IDENTITY };
+  private _mapPanZoom = new PanZoom({
+    max: VACUUM_MAP_MAX_ZOOM,
+    onChange: (view) => {
+      this._mapView = view;
+    },
+    onGestureEnd: (moved) => {
+      // A tap that ended a pan is not a tap. Without this, letting go after
+      // dragging the map would also open more-info.
+      if (!moved) this._mapTapped();
+    },
+  });
   private _chipGestures = new TapHoldGesture();
   private _selectTimers: Record<string, number> = {};
   /** The speed to return to when "mop only" is switched back off. */
@@ -701,22 +716,60 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       parts.push(`${formatNumber(this._language, minutes, { maximumFractionDigits: 0 })} min`);
     }
 
+    const zoomable = this._config?.map_zoom !== false;
+    const view = this._mapView;
+
     return html`
       <div
-        class="map"
+        class="map ${zoomable ? "zoomable" : ""} ${view.scale > 1.001 ? "zoomed" : ""}"
         style=${`--m3v-map-height: ${this._config?.map_height ?? VACUUM_MAP_HEIGHT}px;`}
         role="button"
         tabindex="0"
         aria-label=${this._t("vacuum_map")}
-        @click=${() => this._fireMoreInfo(entityId)}
         @keydown=${activateOnKey(() => this._fireMoreInfo(entityId))}
+        @click=${zoomable ? nothing : () => this._fireMoreInfo(entityId)}
+        @dblclick=${zoomable ? () => this._mapPanZoom.toggle() : nothing}
+        @pointerdown=${zoomable ? this._mapPanZoom.onPointerDown : nothing}
+        @pointermove=${zoomable ? this._mapPanZoom.onPointerMove : nothing}
+        @pointerup=${zoomable ? this._mapPanZoom.onPointerUp : nothing}
+        @pointercancel=${zoomable ? this._mapPanZoom.onPointerUp : nothing}
+        @wheel=${zoomable ? this._mapPanZoom.onWheel : nothing}
+        @touchstart=${zoomable ? stopSwipe : nothing}
+        @touchmove=${zoomable ? stopSwipe : nothing}
+        @touchend=${zoomable ? stopSwipe : nothing}
+        @mousedown=${zoomable ? stopSwipe : nothing}
+        @mousemove=${zoomable ? stopSwipe : nothing}
+        @mouseup=${zoomable ? stopSwipe : nothing}
       >
-        <img src=${`${picture}${picture.includes("?") ? "&" : "?"}s=${state!.state}`} alt="" />
+        <img
+          style=${`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale});`}
+          src=${`${picture}${picture.includes("?") ? "&" : "?"}s=${state!.state}`}
+          alt=""
+        />
         ${parts.length
           ? html`<div class="map-chip">${parts.join(" · ")}</div>`
           : nothing}
+        ${view.scale > 1.001
+          ? html`
+              <button
+                class="map-reset"
+                aria-label=${this._t("vacuum_map")}
+                @click=${(e: Event) => {
+                  e.stopPropagation();
+                  this._mapPanZoom.reset();
+                }}
+              >
+                <ha-icon icon="mdi:magnify-minus-outline"></ha-icon>
+              </button>
+            `
+          : nothing}
       </div>
     `;
+  }
+
+  /** The map's own tap, once a gesture has been ruled out. */
+  private _mapTapped(): void {
+    this._fireMoreInfo(this._entity("map_entity", "map"));
   }
 
   private _numeric(entityId: string | undefined): number | undefined {
@@ -1263,13 +1316,45 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         outline-offset: 2px;
       }
 
+      /* The browser must not pan or pinch the page while the map is being
+         worked; the swipe-navigation plugin is shielded separately, in JS. */
+      .map.zoomable {
+        touch-action: none;
+      }
+
+      .map.zoomed {
+        cursor: grab;
+      }
+
       .map img {
         display: block;
         width: 100%;
         height: var(--m3v-map-height, ${unsafeCSS(VACUUM_MAP_HEIGHT)}px);
         /* contain, never cover: cropping a floor plan hides rooms, and the
-           whole point of the picture is where the vacuum has been. */
+           whole point of the picture is where the vacuum has been. A Roborock
+           map brings wide transparent margins of its own, which is what the
+           zoom is for. */
         object-fit: contain;
+        transform-origin: center;
+        will-change: transform;
+      }
+
+      .map-reset {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        width: 34px;
+        height: 34px;
+        border: none;
+        border-radius: 17px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        --mdc-icon-size: 20px;
+        color: var(--m3p-text, var(--primary-text-color));
+        background: color-mix(in srgb, var(--ha-card-background, var(--card-background-color)) 74%, transparent);
+        backdrop-filter: blur(6px);
       }
 
       .map-chip {
