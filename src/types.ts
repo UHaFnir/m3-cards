@@ -2,6 +2,7 @@ import type { NotifyConfigBase } from "./shared/notify-editor";
 import type { EntityFilterConfig } from "./shared/entity-filter";
 import type { LightGroupHandling } from "./shared/ha-registry";
 import type { QuickBarMode } from "./shared/quick-bar";
+import type { CollapseMemory } from "./shared/collapse-state";
 
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
@@ -772,6 +773,24 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
   icon?: string;
 
   /** Blocks. Each also disappears on its own when its entities are missing. */
+  /**
+   * Folds everything below the primary buttons — the map, the scales, the
+   * chips — leaving the state, the battery and Start/Pause in view. Same four
+   * keys as the room and heading cards, and the same storage.
+   */
+  collapsible?: boolean;
+  default_collapsed?: boolean;
+  collapse_state_entity?: string;
+  collapse_memory?: CollapseMemory;
+
+  /**
+   * Custom status texts, first match wins, matched against the vacuum's own
+   * state. The way a brand whose vocabulary this card does not know gets a
+   * readable line — and the way anyone renames "docked" to something they
+   * prefer.
+   */
+  states?: StatusRule[];
+
   show_map?: boolean;
   /** Height of the map preview in px. Defaults to 300. */
   map_height?: number;

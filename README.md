@@ -4466,6 +4466,40 @@ The suction pills draw four rising bars rather than spelling the level out.
 The names are vendor vocabulary — "Balanced", "Turbo", "Max+", "Custom" — which
 does not sort, does not translate consistently and does not fit a 42px pill.
 
+## Folding it away
+
+`collapsible: true` gives the header a chevron that folds the map, the scales,
+the buttons and the chips. What stays is the line you actually glance at — the
+state, the battery and Start/Pause — which is the split worth making on a
+dashboard where the vacuum is not the main event.
+
+The fold is remembered the same way the room and heading cards remember theirs:
+per device by default, per session with `collapse_memory: session`, or in an
+`input_boolean` via `collapse_state_entity`, which survives a different browser
+and lets an automation fold it.
+
+## Naming states yourself
+
+`states` maps the vacuum's own state onto a label, an icon and a colour, first
+match wins. It exists for two cases: a brand whose vocabulary this card has
+never seen, and a word you simply want different.
+
+```yaml
+type: custom:m3-vacuum-card
+entity: vacuum.dobby
+collapsible: true
+states:
+  - value: docked
+    label: Steht in der Station
+    icon: mdi:sleep
+  - regex: "clean"
+    label: Unterwegs
+    color: "#85b7eb"
+```
+
+A rule's label wins over the status sensor, which is what makes it useful as an
+override rather than only as a fallback.
+
 ## Three things worth knowing about Roborock
 
 **It polls every 30 seconds and pushes nothing.** A tap on Start therefore
@@ -4492,6 +4526,11 @@ something.
 | `entity` | string | — | **Required.** The `vacuum` entity. |
 | `name` | string | entity name | Header title. |
 | `icon` | string | follows the state | Overrides the header icon. |
+| `collapsible` | boolean | `false` | Folds everything below the primary buttons. State, battery and Start/Pause stay in view. |
+| `default_collapsed` | boolean | `false` | Whether it starts folded. |
+| `collapse_state_entity` | string | — | An `input_boolean` holding the fold, so it survives a different browser and an automation can fold it. |
+| `collapse_memory` | `device` \| `session` | `device` | Where the fold is remembered without a helper entity. |
+| `states` | list | — | Custom status texts. First match wins; each rule takes `value`/`regex`/`above`/`below` plus `label`, `icon`, `color`. |
 | `show_map` | boolean | `true` | The live map preview. |
 | `map_height` | number | `300` | Height of the map preview in px. The picture is letterboxed inside it, so this is what decides how large the floor plan reads. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |

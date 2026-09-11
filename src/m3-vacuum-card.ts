@@ -48,6 +48,8 @@ import {
   type LevelStep,
 } from "./shared/level-slider";
 import { runHaAction } from "./shared/actions";
+import { readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+import { findStateRule } from "./shared/state-rules";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { resolveCommonColors, resolveThemeColor, tintOn, inkOn } from "./shared/color-config";
 import { hassChangeMatters } from "./shared/should-update";
@@ -96,6 +98,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _fanOptimistic?: string;
   @state() private _selectOptimistic: Record<string, string> = {};
   @state() private _pressedSelect?: string;
+  @state() private _folded = false;
   private _selectTimers: Record<string, number> = {};
   /** The speed to return to when "mop only" is switched back off. */
   private _lastRealSpeed?: string;
@@ -126,6 +129,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     this._discovered = undefined;
     this._discoveredFor = undefined;
     this._optimistic.clear();
+    this._folded = config.collapsible ? readCollapsed(this.hass, this._foldTarget) : false;
   }
 
   public getCardSize(): number {
@@ -152,6 +156,31 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   private _watched(): (string | undefined)[] {
     const d = this._entities();
     return [this._config?.entity, d?.progress, d?.area, d?.time, d?.status];
+  }
+
+  private get _foldTarget(): CollapseTarget {
+    return {
+      entity: this._config?.collapse_state_entity,
+      // Keyed on the vacuum, so two cards for the same robot on one view share
+      // a fold — which is what someone expects when they collapse one.
+      storageKey: `m3-vacuum-folded:${location.pathname}:${this._config?.entity ?? ""}`,
+      defaultCollapsed: this._config?.default_collapsed,
+      memory: this._config?.collapse_memory,
+    };
+  }
+
+  private _toggleFold = (e: Event): void => {
+    e.stopPropagation();
+    this._folded = !this._folded;
+    writeCollapsed(this.hass, this._foldTarget, this._folded);
+  };
+
+  protected updated(): void {
+    if (!this._config?.collapsible) return;
+    // An entity-backed fold can be changed from another dashboard or by an
+    // automation, so it is re-read rather than only written on a tap.
+    const wanted = readCollapsed(this.hass, this._foldTarget);
+    if (wanted !== this._folded) this._folded = wanted;
   }
 
   private get _language(): string {
@@ -267,18 +296,29 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
    * says "docked" — and the generic state is the fallback for everything else.
    */
   private _statusText(activity: VacuumActivity, pending: boolean): string {
+    // A configured rule wins over everything, including the status sensor:
+    // it is the only way a brand this card has never seen gets a line a
+    // person can read, and the only way to override one it got wrong.
+    const rule = this._stateRule();
+    if (rule?.label && !pending) return rule.label;
+
     if (pending) {
       // Mid-command the status sensor still describes the old state, so the
       // generic label is the honest one to show.
       return this._t(`vacuum_${activity}` as TranslationKey);
     }
     const statusEntity = this._entity("status_entity", "status");
-    const raw = statusEntity ? this.hass?.states[statusEntity]?.state : undefined;
-    if (raw && raw !== "unknown" && raw !== "unavailable") {
+    const statusRaw = statusEntity ? this.hass?.states[statusEntity]?.state : undefined;
+    if (statusRaw && statusRaw !== "unknown" && statusRaw !== "unavailable") {
       const localised = this.hass?.formatEntityState?.(this.hass.states[statusEntity!]);
       if (localised) return localised;
     }
     return this._t(`vacuum_${activity}` as TranslationKey);
+  }
+
+  private _stateRule() {
+    const raw = this.hass?.states[this._config!.entity]?.state ?? "";
+    return findStateRule(this._config?.states, raw, undefined);
   }
 
   private _battery(): { level?: number; charging: boolean } {
@@ -331,10 +371,16 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     const colors = resolveCommonColors(this._config);
     // A configured accent pins the card to one colour; without one the state
     // is the colour, which is the whole point of the header.
+    const ruleColor = this._stateRule()?.color;
     const accent = this._config.accent_color
       ? resolveThemeColor(this._config.accent_color)
-      : activityColor(activity);
+      : ruleColor
+        ? resolveThemeColor(ruleColor)
+        : activityColor(activity);
     const radius = `${this._config.radius ?? DEFAULT_VACUUM_RADIUS}px`;
+    // The state, the battery and Start/Pause never fold: they are what the
+    // card is for at a glance. Everything below them does.
+    const folded = !!this._config.collapsible && this._folded;
 
     return html`
       <ha-card
@@ -352,8 +398,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
             colors.cardBackgroundCss ? ` background: ${colors.cardBackgroundCss};` : ""
           }`}
         >
-          ${this._renderHeader(activity, pending)} ${this._renderMap()}
+          ${this._renderHeader(activity, pending)}
           ${this._renderPrimaryRow(activity, pending)}
+          ${folded
+            ? nothing
+            : html`
+          ${this._renderMap()}
           ${this._renderFanSpeed(state.attributes.fan_speed_list as string[] | undefined,
             state.attributes.fan_speed as string | undefined,
             unavailable)}
@@ -373,7 +423,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
             this._config.show_mop_mode ?? false,
             unavailable,
           )}
-          ${this._renderButtons(unavailable)} ${this._renderChips()}
+          ${this._renderButtons(unavailable)} ${this._renderChips()}`}
           ${this._config.card_version
             ? html`<div class="version">${CARD_VERSION}</div>`
             : nothing}
@@ -398,12 +448,26 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
           @click=${() => this._fireMoreInfo(cfg.entity)}
           @keydown=${activateOnKey(() => this._fireMoreInfo(cfg.entity))}
         >
-          <ha-icon icon=${cfg.icon ?? activityIcon(activity) ?? DEFAULT_VACUUM_ICON}></ha-icon>
+          <ha-icon
+            icon=${cfg.icon ?? this._stateRule()?.icon ?? activityIcon(activity) ?? DEFAULT_VACUUM_ICON}
+          ></ha-icon>
         </div>
         <div class="header-text">
           <div class="name">${name}</div>
           <div class="status">${this._statusText(activity, pending)}</div>
         </div>
+        ${cfg.collapsible
+          ? html`
+              <button
+                class="fold ${this._folded ? "folded" : ""}"
+                aria-expanded=${String(!this._folded)}
+                aria-label=${name}
+                @click=${this._toggleFold}
+              >
+                <ha-icon icon="mdi:chevron-down"></ha-icon>
+              </button>
+            `
+          : nothing}
         ${level !== undefined
           ? html`
               <div
@@ -989,6 +1053,27 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         font-size: 12px;
         font-weight: 700;
         --mdc-icon-size: 15px;
+      }
+
+      .fold {
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        border: none;
+        border-radius: 17px;
+        background: transparent;
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        --mdc-icon-size: 22px;
+        transition: transform 0.25s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      /* Pointing the way it will move, not the way it came from. */
+      .fold.folded {
+        transform: rotate(-90deg);
       }
 
       .primary-row {
