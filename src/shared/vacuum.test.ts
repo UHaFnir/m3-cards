@@ -4,11 +4,11 @@ import {
   activityColor,
   discoverVacuum,
   findDockDevice,
-  fanBarsLit,
   fanSpeedKey,
   optimisticActivity,
   primaryIntent,
   resolveActivity,
+  supportsFeature,
 } from "./vacuum";
 import { PALETTE } from "./tokens";
 import type { HomeAssistant } from "../types";
@@ -124,32 +124,6 @@ describe("OptimisticActivity", () => {
     vi.advanceTimersByTime(70_001);
     expect(expired).not.toHaveBeenCalled();
     expect(o.resolve("docked").pending).toBe(false);
-  });
-});
-
-describe("fanBarsLit", () => {
-  it("lights every bar when there is nothing to choose between", () => {
-    expect(fanBarsLit(0, 1)).toBe(4);
-  });
-
-  it("spreads three steps across the four bars without starting at one", () => {
-    // A three-step vacuum on its lowest setting should not look like it is
-    // running at a quarter power.
-    expect(fanBarsLit(0, 3)).toBe(1);
-    expect(fanBarsLit(1, 3)).toBe(3);
-    expect(fanBarsLit(2, 3)).toBe(4);
-  });
-
-  it("maps four steps one to one", () => {
-    expect([0, 1, 2, 3].map((i) => fanBarsLit(i, 4))).toEqual([1, 2, 3, 4]);
-  });
-
-  it("never returns zero bars", () => {
-    for (let total = 1; total <= 8; total++) {
-      for (let i = 0; i < total; i++) {
-        expect(fanBarsLit(i, total)).toBeGreaterThanOrEqual(1);
-      }
-    }
   });
 });
 
@@ -375,5 +349,52 @@ describe("discoverVacuum — the keys a real S7 Pro Ultra reports", () => {
     expect(discoverVacuum(h, "vacuum.dobby").binary.charging).toBe(
       "binary_sensor.dobby_ladestatus",
     );
+  });
+});
+
+describe("supportsFeature", () => {
+  // The real bitmask from a Roborock S7 Pro Ultra.
+  const S7 = 30524;
+
+  it("reads the bits an entity declares", () => {
+    expect(supportsFeature(S7, "START")).toBe(true);
+    expect(supportsFeature(S7, "PAUSE")).toBe(true);
+    expect(supportsFeature(S7, "RETURN_HOME")).toBe(true);
+    expect(supportsFeature(S7, "FAN_SPEED")).toBe(true);
+    expect(supportsFeature(S7, "LOCATE")).toBe(true);
+  });
+
+  it("reports the ones it does not", () => {
+    // Battery moved to its own sensor, so the bit is deliberately unset —
+    // the card must not conclude the vacuum has no battery.
+    expect(supportsFeature(S7, "BATTERY")).toBe(false);
+    expect(supportsFeature(S7, "TURN_ON")).toBe(false);
+    expect(supportsFeature(S7, "MAP")).toBe(false);
+  });
+
+  it("treats a silent entity as capable", () => {
+    // Some integrations never set supported_features. Hiding every control
+    // for them would be worse than offering one that errors.
+    expect(supportsFeature(undefined, "PAUSE")).toBe(true);
+  });
+});
+
+describe("primaryIntent with capabilities", () => {
+  it("falls back to stop on a vacuum that cannot pause", () => {
+    const noPause = 8192 + 8; // START + STOP
+    expect(primaryIntent("cleaning", noPause)).toBe("stop");
+  });
+
+  it("offers nothing when it can neither pause nor stop", () => {
+    expect(primaryIntent("cleaning", 8192)).toBe("none");
+  });
+
+  it("offers nothing to start when START is absent", () => {
+    expect(primaryIntent("docked", 4)).toBe("none");
+  });
+
+  it("behaves as before when nothing is declared", () => {
+    expect(primaryIntent("cleaning")).toBe("pause");
+    expect(primaryIntent("docked")).toBe("start");
   });
 });

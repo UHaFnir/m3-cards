@@ -2058,14 +2058,11 @@ export const VACUUM_SECONDARY_TINT = 8;
  *  not confirmed yet. Enough to read as "working on it", not as "disabled". */
 export const VACUUM_PENDING_OPACITY = 0.62;
 
-/** Fan-speed pills, and the four bars drawn inside them. */
-export const VACUUM_FAN_HEIGHT = 42;
-export const VACUUM_FAN_RADIUS = 21;
-export const VACUUM_FAN_RADIUS_ACTIVE = 12;
-export const VACUUM_FAN_TINT = 14;
-export const VACUUM_FAN_BAR_WIDTH = 2.5;
-export const VACUUM_FAN_BAR_RADIUS = 1.5;
-export const VACUUM_FAN_LABEL_SIZE = 9;
+/** "Mop only" toggle beside the suction scale. The scale itself takes its
+ *  geometry from shared/level-slider.ts, which owns the Expressive spec. */
+export const VACUUM_MOP_ONLY_SIZE = 40;
+export const VACUUM_MOP_ONLY_RADIUS = VACUUM_MOP_ONLY_SIZE / 2;
+export const VACUUM_MOP_ONLY_RADIUS_ACTIVE = 12;
 
 /** Room chips. */
 export const VACUUM_ROOM_HEIGHT = 32;

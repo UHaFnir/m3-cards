@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg, nothing, unsafeCSS, type PropertyValues } from "lit";
+import { LitElement, html, css, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
@@ -15,13 +15,6 @@ import {
   VACUUM_BATTERY_LOW,
   VACUUM_BATTERY_OK,
   VACUUM_BATTERY_RADIUS,
-  VACUUM_FAN_BAR_RADIUS,
-  VACUUM_FAN_BAR_WIDTH,
-  VACUUM_FAN_HEIGHT,
-  VACUUM_FAN_LABEL_SIZE,
-  VACUUM_FAN_RADIUS,
-  VACUUM_FAN_RADIUS_ACTIVE,
-  VACUUM_FAN_TINT,
   VACUUM_ICON_RADIUS,
   VACUUM_ICON_SIZE,
   VACUUM_ICON_TINT,
@@ -39,20 +32,24 @@ import {
 import { localize, type TranslationKey } from "./localize";
 import { activateOnKey } from "./shared/a11y";
 import { STANDARD_EASING } from "./shared/animation";
+import {
+  renderLevelSlider,
+  levelSliderStyles,
+  type LevelStep,
+} from "./shared/level-slider";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { resolveCommonColors, resolveThemeColor, tintOn, inkOn } from "./shared/color-config";
 import { hassChangeMatters } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
 import {
-  FAN_BAR_HEIGHTS,
   OptimisticActivity,
   activityColor,
   activityIcon,
   discoverVacuum,
-  fanBarsLit,
   fanSpeedKey,
   optimisticActivity,
   primaryIntent,
+  supportsFeature,
   resolveActivity,
   type DiscoveredVacuum,
   type VacuumActivity,
@@ -80,12 +77,21 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _config?: M3VacuumCardConfig;
   /** Bumped when the optimistic state expires, to force one more render. */
   @state() private _tick = 0;
+  @state() private _fanPressed = false;
+  /**
+   * What the card last asked for, shown until the 30-second poll catches up.
+   * Without it a drag snaps back to the old value a moment after releasing.
+   */
+  @state() private _fanOptimistic?: string;
+  /** The speed to return to when "mop only" is switched back off. */
+  private _lastRealSpeed?: string;
 
   private _optimistic = new OptimisticActivity(VACUUM_OPTIMISTIC_MS, () => {
     this._tick++;
   });
   private _discovered?: DiscoveredVacuum;
   private _discoveredFor?: string;
+  private _fanSettle?: number;
 
   // getConfigElement() lands with the editor in step 5; until then Home
   // Assistant falls back to its own YAML editor for this card.
@@ -119,6 +125,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     this._optimistic.clear();
+    if (this._fanSettle) clearTimeout(this._fanSettle);
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
@@ -202,7 +209,17 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     }
   }
 
+  /**
+   * Sets the speed and shows it at once. The poll is 30 seconds away, and a
+   * slider that springs back to where it was is worse than no slider.
+   */
   private _setFanSpeed(speed: string): void {
+    this._fanOptimistic = speed;
+    if (this._fanSettle) clearTimeout(this._fanSettle);
+    this._fanSettle = setTimeout(() => {
+      this._fanOptimistic = undefined;
+      this._fanSettle = undefined;
+    }, VACUUM_OPTIMISTIC_MS) as unknown as number;
     this._call("set_fan_speed", { fan_speed: speed });
   }
 
@@ -370,15 +387,20 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   private _renderPrimaryRow(activity: VacuumActivity, pending: boolean) {
     const cfg = this._config!;
     const unavailable = activity === "unavailable";
-    const intent = primaryIntent(activity);
+    const supported = this.hass!.states[cfg.entity]?.attributes?.supported_features as
+      | number
+      | undefined;
+    const intent = primaryIntent(activity, supported);
     const label =
       intent === "pause"
         ? this._t("vacuum_pause")
-        : intent === "resume"
-          ? this._t("vacuum_resume")
-          : this._t("vacuum_start");
+        : intent === "stop"
+          ? this._t("vacuum_stop")
+          : intent === "resume"
+            ? this._t("vacuum_resume")
+            : this._t("vacuum_start");
     const icon =
-      intent === "pause" ? "mdi:pause" : intent === "resume" ? "mdi:play" : "mdi:play";
+      intent === "pause" ? "mdi:pause" : intent === "stop" ? "mdi:stop" : "mdi:play";
 
     // Paused morphs rounder: the shape carries the state, so the button still
     // reads as "held" at a glance from across the room.
@@ -393,6 +415,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
           ?disabled=${unavailable || intent === "none"}
           @click=${() => {
             if (intent === "pause") this._command("pause");
+            else if (intent === "stop") this._command("stop");
             else if (intent === "resume") this._command("resume");
             else this._command("start");
           }}
@@ -401,10 +424,26 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
           <span>${label}</span>
         </button>
         ${(secondary as readonly VacuumSecondaryAction[])
+          .filter((action) => this._secondarySupported(action, supported))
           .slice(0, 2)
           .map((action) => this._renderSecondary(action, unavailable))}
       </div>
     `;
+  }
+
+  /** A control the entity has not declared is not drawn at all — a dead
+   *  button is worse than a missing one. */
+  private _secondarySupported(action: VacuumSecondaryAction, supported?: number): boolean {
+    switch (action) {
+      case "return_to_base":
+        return supportsFeature(supported, "RETURN_HOME");
+      case "locate":
+        return supportsFeature(supported, "LOCATE");
+      case "stop":
+        return supportsFeature(supported, "STOP");
+      default:
+        return true;
+    }
   }
 
   private _renderSecondary(action: VacuumSecondaryAction, unavailable: boolean) {
@@ -435,63 +474,83 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     `;
   }
 
+  /**
+   * Suction, as an ordered scale rather than a row of buttons.
+   *
+   * `off` and `custom` are deliberately not on it. `off` is not a quieter
+   * setting, it is "do not vacuum at all" — a different decision, so it gets
+   * its own leading toggle. `custom` is defined in the Roborock app and has no
+   * place between two steps; it is shown when it is what the vacuum is doing
+   * and dragging simply leaves it.
+   */
   private _renderFanSpeed(
     list: string[] | undefined,
     current: string | undefined,
     unavailable: boolean,
   ) {
     if (this._config?.show_fan_speed === false) return nothing;
-    // Not every vacuum reports a list, and a row of one pill is not a choice.
+    const supported = this.hass?.states[this._config!.entity]?.attributes?.supported_features as
+      | number
+      | undefined;
+    if (!supportsFeature(supported, "FAN_SPEED")) return nothing;
     if (!list || list.length < 2) return nothing;
 
-    return html`
-      <div class="section-label">${this._t("vacuum_fan_speed")}</div>
-      <div class="fan-row">
-        ${list.map((speed, index) => {
-          const active = speed === current;
-          const key = fanSpeedKey(speed);
-          const label = key ? this._t(`vacuum_fan_${key}` as TranslationKey) : speed;
-          const lit = fanBarsLit(index, list.length);
-          return html`
-            <button
-              class="fan ${active ? "active" : ""}"
-              ?disabled=${unavailable}
-              aria-pressed=${active ? "true" : "false"}
-              @click=${() => this._setFanSpeed(speed)}
-            >
-              ${this._renderBars(lit)}
-              <span class="fan-label">${label}</span>
-            </button>
-          `;
-        })}
-      </div>
-    `;
-  }
+    const scale = list.filter((s) => s !== "off" && s !== "custom");
+    if (scale.length < 2) return nothing;
 
-  /** Four rising bars, the lit ones in the pill's ink. */
-  private _renderBars(lit: number) {
-    const width = FAN_BAR_HEIGHTS.length * (VACUUM_FAN_BAR_WIDTH + 2) - 2;
-    const height = Math.max(...FAN_BAR_HEIGHTS);
-    return svg`
-      <svg class="bars" width=${width} height=${height} viewBox=${`0 0 ${width} ${height}`}>
-        ${FAN_BAR_HEIGHTS.map(
-          (h, i) => svg`
-            <rect
-              x=${i * (VACUUM_FAN_BAR_WIDTH + 2)}
-              y=${height - h}
-              width=${VACUUM_FAN_BAR_WIDTH}
-              height=${h}
-              rx=${VACUUM_FAN_BAR_RADIUS}
-              opacity=${i < lit ? 1 : 0.28}
-            ></rect>
-          `,
-        )}
-      </svg>
+    const shown = this._fanOptimistic ?? current;
+    if (shown && shown !== "off" && shown !== "custom") this._lastRealSpeed = shown;
+
+    const steps: LevelStep[] = scale.map((speed) => {
+      const key = fanSpeedKey(speed);
+      return { value: speed, label: key ? this._t(`vacuum_fan_${key}` as TranslationKey) : speed };
+    });
+
+    const hasOff = list.includes("off");
+    const isOff = shown === "off";
+
+    return html`
+      <div class="fan-row">
+        ${hasOff
+          ? html`
+              <button
+                class="mop-only ${isOff ? "active" : ""}"
+                ?disabled=${unavailable}
+                aria-pressed=${isOff ? "true" : "false"}
+                aria-label=${this._t("vacuum_fan_off")}
+                title=${this._t("vacuum_fan_off")}
+                @click=${() =>
+                  this._setFanSpeed(isOff ? (this._lastRealSpeed ?? scale[0]) : "off")}
+              >
+                <ha-icon icon=${isOff ? "mdi:fan-off" : "mdi:fan"}></ha-icon>
+              </button>
+            `
+          : nothing}
+        <div class="fan-slider">
+          ${renderLevelSlider({
+            steps,
+            current: isOff ? undefined : shown,
+            label: this._t("vacuum_fan_speed"),
+            offScaleLabel: isOff
+              ? this._t("vacuum_fan_off")
+              : shown === "custom"
+                ? this._t("vacuum_fan_custom")
+                : undefined,
+            disabled: unavailable,
+            pressed: this._fanPressed,
+            setPressed: (p) => {
+              this._fanPressed = p;
+            },
+            onChange: (value) => this._setFanSpeed(value),
+          })}
+        </div>
+      </div>
     `;
   }
 
   static styles = [
     glassCardStyles,
+    levelSliderStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -647,62 +706,44 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         transition: background 0.25s ${unsafeCSS(STANDARD_EASING)};
       }
 
-      .section-label {
-        font-size: 11px;
-        font-weight: 600;
-        opacity: 0.55;
-        margin-bottom: -6px;
-      }
-
       .fan-row {
         display: flex;
-        gap: 6px;
+        align-items: flex-end;
+        gap: 8px;
       }
 
-      .fan {
+      .fan-slider {
         flex: 1;
         min-width: 0;
-        height: ${unsafeCSS(VACUUM_FAN_HEIGHT)}px;
+        --level-accent: var(--m3v-accent);
+        --level-ink: var(--m3v-ink);
+      }
+
+      /* "Mop only" is a mode, not a quieter setting, so it sits beside the
+         scale rather than on it. */
+      .mop-only {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        margin-bottom: 2px;
         border: none;
-        border-radius: ${unsafeCSS(VACUUM_FAN_RADIUS)}px;
+        border-radius: 20px;
         background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
         color: var(--m3p-secondary-text, var(--secondary-text-color));
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: 0 4px;
-        font-family: inherit;
         cursor: pointer;
+        --mdc-icon-size: 20px;
         transition:
           border-radius 0.35s ${unsafeCSS(STANDARD_EASING)},
-          background 0.25s ${unsafeCSS(STANDARD_EASING)},
-          color 0.25s ${unsafeCSS(STANDARD_EASING)};
+          background 0.25s ${unsafeCSS(STANDARD_EASING)};
       }
 
-      .fan.active {
-        border-radius: ${unsafeCSS(VACUUM_FAN_RADIUS_ACTIVE)}px;
-        background: color-mix(
-          in srgb,
-          var(--m3v-accent) ${unsafeCSS(VACUUM_FAN_TINT)}%,
-          transparent
-        );
+      .mop-only.active {
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--m3v-accent) 16%, transparent);
         color: var(--m3v-accent);
-      }
-
-      .bars {
-        display: block;
-        fill: currentColor;
-      }
-
-      .fan-label {
-        font-size: ${unsafeCSS(VACUUM_FAN_LABEL_SIZE)}px;
-        font-weight: 600;
-        max-width: 100%;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
 
       .version {

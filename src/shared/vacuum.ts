@@ -88,18 +88,72 @@ export function activityIcon(activity: VacuumActivity): string {
   }
 }
 
-/** Which service a tap on the primary button should call, given the state. */
-export type PrimaryIntent = "start" | "pause" | "resume" | "none";
+// ---- capabilities -----------------------------------------------------------
 
-export function primaryIntent(activity: VacuumActivity): PrimaryIntent {
+/**
+ * Home Assistant's own `VacuumEntityFeature` bits.
+ *
+ * This is what makes the card brand-agnostic rather than Roborock-shaped: the
+ * `vacuum` domain normalises start/pause/stop/return/locate/fan-speed across
+ * every integration, and each entity declares which of them it actually has.
+ * Reading that is the difference between "works with any vacuum" and "draws
+ * buttons that silently do nothing on a Valetudo".
+ *
+ * Only the bits the card acts on are listed. Unknown higher bits are ignored
+ * rather than guessed at.
+ */
+export const VACUUM_FEATURE = {
+  TURN_ON: 1,
+  TURN_OFF: 2,
+  PAUSE: 4,
+  STOP: 8,
+  RETURN_HOME: 16,
+  FAN_SPEED: 32,
+  BATTERY: 64,
+  STATUS: 128,
+  SEND_COMMAND: 256,
+  LOCATE: 512,
+  CLEAN_SPOT: 1024,
+  MAP: 2048,
+  STATE: 4096,
+  START: 8192,
+} as const;
+
+export type VacuumFeature = keyof typeof VACUUM_FEATURE;
+
+/**
+ * Whether the entity declares a capability.
+ *
+ * An entity that reports no `supported_features` at all is treated as capable:
+ * some integrations simply do not set it, and hiding every control on those
+ * would be worse than offering one that errors.
+ */
+export function supportsFeature(
+  supported: number | undefined,
+  feature: VacuumFeature,
+): boolean {
+  if (supported === undefined || supported === null) return true;
+  return (supported & VACUUM_FEATURE[feature]) !== 0;
+}
+
+/** Which service a tap on the primary button should call, given the state. */
+export type PrimaryIntent = "start" | "pause" | "resume" | "stop" | "none";
+
+export function primaryIntent(
+  activity: VacuumActivity,
+  supported?: number,
+): PrimaryIntent {
   switch (activity) {
     case "cleaning":
-      return "pause";
+      // A vacuum that cannot pause can usually still be stopped; offering
+      // "Pause" on one that has neither would be a button that does nothing.
+      if (supportsFeature(supported, "PAUSE")) return "pause";
+      return supportsFeature(supported, "STOP") ? "stop" : "none";
     case "paused":
-      return "resume";
+      return supportsFeature(supported, "START") ? "resume" : "none";
     case "docked":
     case "idle":
-      return "start";
+      return supportsFeature(supported, "START") ? "start" : "none";
     default:
       // Returning or errored: starting from here is ambiguous, so the button
       // says nothing rather than guessing.
@@ -391,23 +445,6 @@ export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): Dis
 }
 
 // ---- fan speed --------------------------------------------------------------
-
-/**
- * The four bar heights a fan-speed pill draws, and which of them are lit.
- *
- * Drawn rather than written because the list is vendor vocabulary — "Balanced",
- * "Turbo", "Max+", "Custom" — which does not sort, does not translate
- * consistently and does not fit a 42px pill. Four rising bars do all three.
- */
-export const FAN_BAR_HEIGHTS = [6.5, 9, 11.5, 14] as const;
-
-export function fanBarsLit(index: number, total: number): number {
-  if (total <= 1) return FAN_BAR_HEIGHTS.length;
-  // Spread the available steps across four bars, so a three-step vacuum lights
-  // 2/3/4 rather than 1/2/3 and never looks like it is running at a quarter.
-  const ratio = index / (total - 1);
-  return Math.max(1, Math.round(ratio * (FAN_BAR_HEIGHTS.length - 1)) + 1);
-}
 
 /**
  * Roborock's own speed names, lower-cased, so the card can look up a
