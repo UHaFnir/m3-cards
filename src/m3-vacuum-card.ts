@@ -1,16 +1,24 @@
 import { LitElement, html, css, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
+  HaActionConfig,
   HomeAssistant,
   LovelaceCard,
   LovelaceGridOptions,
   M3VacuumCardConfig,
+  VacuumButtonConfig,
   VacuumSecondaryAction,
 } from "./types";
 import {
   CARD_VERSION,
   DEFAULT_VACUUM_ICON,
   DEFAULT_VACUUM_RADIUS,
+  VACUUM_CHIP_GAP,
+  VACUUM_CHIP_HEIGHT,
+  VACUUM_CHIP_RADIUS,
+  VACUUM_MAP_CHIP_RADIUS,
+  VACUUM_MAP_RADIUS,
+  VACUUM_MAX_CHIPS,
   VACUUM_BATTERY_HEIGHT,
   VACUUM_BATTERY_LOW,
   VACUUM_BATTERY_OK,
@@ -30,6 +38,7 @@ import {
   VACUUM_STATUS_SIZE,
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
+import { formatNumber } from "./shared/formatting";
 import { activateOnKey } from "./shared/a11y";
 import { STANDARD_EASING } from "./shared/animation";
 import {
@@ -37,6 +46,7 @@ import {
   levelSliderStyles,
   type LevelStep,
 } from "./shared/level-slider";
+import { runHaAction } from "./shared/actions";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { resolveCommonColors, resolveThemeColor, tintOn, inkOn } from "./shared/color-config";
 import { hassChangeMatters } from "./shared/should-update";
@@ -83,6 +93,9 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
    * Without it a drag snaps back to the old value a moment after releasing.
    */
   @state() private _fanOptimistic?: string;
+  @state() private _selectOptimistic: Record<string, string> = {};
+  @state() private _pressedSelect?: string;
+  private _selectTimers: Record<string, number> = {};
   /** The speed to return to when "mop only" is switched back off. */
   private _lastRealSpeed?: string;
 
@@ -126,6 +139,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     super.disconnectedCallback();
     this._optimistic.clear();
     if (this._fanSettle) clearTimeout(this._fanSettle);
+    for (const t of Object.values(this._selectTimers)) clearTimeout(t);
+    this._selectTimers = {};
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
@@ -216,6 +231,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   private _setFanSpeed(speed: string): void {
     this._fanOptimistic = speed;
     if (this._fanSettle) clearTimeout(this._fanSettle);
+    for (const t of Object.values(this._selectTimers)) clearTimeout(t);
+    this._selectTimers = {};
     this._fanSettle = setTimeout(() => {
       this._fanOptimistic = undefined;
       this._fanSettle = undefined;
@@ -334,10 +351,28 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
             colors.cardBackgroundCss ? ` background: ${colors.cardBackgroundCss};` : ""
           }`}
         >
-          ${this._renderHeader(activity, pending)} ${this._renderPrimaryRow(activity, pending)}
+          ${this._renderHeader(activity, pending)} ${this._renderMap()}
+          ${this._renderPrimaryRow(activity, pending)}
           ${this._renderFanSpeed(state.attributes.fan_speed_list as string[] | undefined,
             state.attributes.fan_speed as string | undefined,
             unavailable)}
+          ${this._renderSelectScale(
+            "mop_intensity_entity",
+            "mopIntensity",
+            "vacuum_mop_intensity",
+            "vacuum_mop_",
+            this._config.show_mop_intensity,
+            unavailable,
+          )}
+          ${this._renderSelectScale(
+            "mop_mode_entity",
+            "mopMode",
+            "vacuum_mop_mode",
+            "vacuum_route_",
+            this._config.show_mop_mode ?? false,
+            unavailable,
+          )}
+          ${this._renderButtons(unavailable)} ${this._renderChips()}
           ${this._config.card_version
             ? html`<div class="version">${CARD_VERSION}</div>`
             : nothing}
@@ -548,6 +583,316 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     `;
   }
 
+  // ---- map ------------------------------------------------------------------
+
+  /**
+   * The live map.
+   *
+   * No refresh timer, deliberately. An `image` entity's *state* is the
+   * timestamp of the picture behind it, so keying the URL on that state makes
+   * the browser refetch exactly when there is something new and never
+   * otherwise — which beats the 30-second poll the integration does anyway,
+   * and costs nothing while the card is off screen.
+   */
+  private _renderMap() {
+    if (this._config?.show_map === false) return nothing;
+    const entityId = this._entity("map_entity", "map");
+    if (!entityId) return nothing;
+    const state = this.hass?.states[entityId];
+    const picture = state?.attributes.entity_picture as string | undefined;
+    if (!picture) return nothing;
+
+    const area = this._numeric(this._entity("area_entity", "area"));
+    const minutes = this._numeric(this._entity("time_entity", "time"));
+    const parts: string[] = [];
+    if (area !== undefined && area > 0) parts.push(`${formatNumber(this._language, area, { maximumFractionDigits: 1 })} m²`);
+    if (minutes !== undefined && minutes >= 1) {
+      parts.push(`${formatNumber(this._language, minutes, { maximumFractionDigits: 0 })} min`);
+    }
+
+    return html`
+      <div
+        class="map"
+        role="button"
+        tabindex="0"
+        aria-label=${this._t("vacuum_map")}
+        @click=${() => this._fireMoreInfo(entityId)}
+        @keydown=${activateOnKey(() => this._fireMoreInfo(entityId))}
+      >
+        <img src=${`${picture}${picture.includes("?") ? "&" : "?"}s=${state!.state}`} alt="" />
+        ${parts.length
+          ? html`<div class="map-chip">${parts.join(" · ")}</div>`
+          : nothing}
+      </div>
+    `;
+  }
+
+  private _numeric(entityId: string | undefined): number | undefined {
+    if (!entityId) return undefined;
+    const value = parseFloat(this.hass?.states[entityId]?.state ?? "");
+    return isNaN(value) ? undefined : value;
+  }
+
+  // ---- select-backed scales ---------------------------------------------------
+
+  /**
+   * A `select` entity drawn as the same Expressive scale as suction.
+   *
+   * Mop intensity and mop route are both ordered lists, which is what the
+   * slider is for. `custom` is the one option that is not on the scale — it is
+   * whatever was configured in the vendor's app — so it is shown when active
+   * and skipped when choosing.
+   */
+  private _renderSelectScale(
+    override: keyof M3VacuumCardConfig,
+    found: keyof DiscoveredVacuum,
+    labelKey: TranslationKey,
+    prefix: string,
+    show: boolean | undefined,
+    unavailable: boolean,
+  ) {
+    if (show === false) return nothing;
+    const entityId = this._entity(override, found);
+    if (!entityId) return nothing;
+    const state = this.hass?.states[entityId];
+    const options = state?.attributes.options as string[] | undefined;
+    if (!options || options.length < 2) return nothing;
+
+    const scale = options.filter((o) => o !== "custom" && o !== "unknown");
+    if (scale.length < 2) return nothing;
+    const current = this._selectOptimistic[entityId] ?? state!.state;
+    const label = (value: string) => {
+      const key = `${prefix}${value}` as TranslationKey;
+      const text = this._t(key);
+      // localize() hands back the key itself when it has no translation, which
+      // is the signal to show the integration's own word instead.
+      return text === key ? value : text;
+    };
+
+    return html`
+      <div class="scale-row">
+        ${renderLevelSlider({
+          steps: scale.map((value) => ({ value, label: label(value) })),
+          current: scale.includes(current) ? current : undefined,
+          label: this._t(labelKey),
+          offScaleLabel: label(current),
+          disabled: unavailable,
+          pressed: this._pressedSelect === entityId,
+          setPressed: (p) => {
+            this._pressedSelect = p ? entityId : undefined;
+          },
+          onChange: (value) => this._selectOption(entityId, value),
+        })}
+      </div>
+    `;
+  }
+
+  private _selectOption(entityId: string, option: string): void {
+    this._selectOptimistic = { ...this._selectOptimistic, [entityId]: option };
+    const timers = this._selectTimers;
+    if (timers[entityId]) clearTimeout(timers[entityId]);
+    timers[entityId] = setTimeout(() => {
+      const next = { ...this._selectOptimistic };
+      delete next[entityId];
+      this._selectOptimistic = next;
+      delete this._selectTimers[entityId];
+    }, VACUUM_OPTIMISTIC_MS) as unknown as number;
+    this.hass?.callService("select", "select_option", { entity_id: entityId, option });
+  }
+
+  // ---- free buttons -----------------------------------------------------------
+
+  /**
+   * Buttons the config names, for whatever the vacuum's integration exposes
+   * that this card cannot know about — app routines, scripts, scenes. The
+   * service is chosen from the entity's domain, so the common case needs no
+   * `tap_action` at all.
+   */
+  private _renderButtons(unavailable: boolean) {
+    const buttons = this._config?.buttons;
+    if (!buttons?.length) return nothing;
+    return html`
+      <div class="free-buttons">
+        ${buttons.map((cfg) => this._renderFreeButton(cfg, unavailable))}
+      </div>
+    `;
+  }
+
+  private _renderFreeButton(cfg: VacuumButtonConfig, unavailable: boolean) {
+    const state = cfg.entity ? this.hass?.states[cfg.entity] : undefined;
+    const name = cfg.name ?? state?.attributes.friendly_name ?? cfg.entity ?? "";
+    const missing = !!cfg.entity && !state;
+    return html`
+      <button
+        class="free-button"
+        ?disabled=${unavailable || missing}
+        title=${missing ? `${cfg.entity} ${this._t("vacuum_unavailable")}` : name}
+        @click=${() => this._pressFreeButton(cfg)}
+      >
+        ${cfg.icon ? html`<ha-icon icon=${cfg.icon}></ha-icon>` : nothing}
+        <span>${name}</span>
+      </button>
+    `;
+  }
+
+  private _pressFreeButton(cfg: VacuumButtonConfig): void {
+    if (cfg.tap_action) {
+      this._runConfiguredAction(cfg.tap_action, cfg.entity);
+      return;
+    }
+    if (!cfg.entity || !this.hass) return;
+    const domain = cfg.entity.split(".")[0];
+    // One sensible press per domain, so a routine button, a script and a scene
+    // all just work without the user learning a service name.
+    const service: Record<string, string> = {
+      button: "press",
+      input_button: "press",
+      script: "turn_on",
+      scene: "turn_on",
+      switch: "toggle",
+      input_boolean: "toggle",
+      automation: "trigger",
+      vacuum: "start",
+    };
+    const call = service[domain];
+    if (!call) {
+      this._fireMoreInfo(cfg.entity);
+      return;
+    }
+    this.hass.callService(domain, call, { entity_id: cfg.entity });
+  }
+
+  private _runConfiguredAction(action: HaActionConfig, entityId: string | undefined): void {
+    if (!this.hass) return;
+    runHaAction(this.hass, action, {
+      entityId: entityId ?? this._config!.entity,
+      openPopup: () => this._fireMoreInfo(entityId ?? this._config!.entity),
+      fireMoreInfo: (id) => this._fireMoreInfo(id),
+      navigate: (path) => {
+        window.history.pushState(null, "", path);
+        this.dispatchEvent(
+          new CustomEvent("location-changed", {
+            bubbles: true,
+            composed: true,
+            detail: { replace: false },
+          }),
+        );
+      },
+    });
+  }
+
+  // ---- station chips ----------------------------------------------------------
+
+  /**
+   * Only what is worth saying. A full clean-water tank and an attached mop are
+   * the normal case and say nothing; an empty tank, a full waste tank or a
+   * dock error are what the row exists for.
+   *
+   * Errors are never collapsed into the "+n" overflow — they are the reason
+   * someone looks at the card at all.
+   */
+  private _renderChips() {
+    if (this._config?.show_station_chips === false) return nothing;
+    const d = this._entities();
+    if (!d) return nothing;
+
+    type Chip = { icon: string; text: string; tone: "error" | "warn" | "plain" };
+    const chips: Chip[] = [];
+    const on = (id: string | undefined) =>
+      id ? this.hass?.states[id]?.state === "on" : false;
+
+    // Errors first, and always shown.
+    const dockError = this._enumState(d.dockError);
+    if (dockError) {
+      chips.push({
+        icon: "mdi:home-alert-outline",
+        text: `${this._t("vacuum_dock_error")}: ${dockError}`,
+        tone: "error",
+      });
+    }
+    const vacError = this._enumState(d.vacuumError);
+    if (vacError) {
+      chips.push({
+        icon: "mdi:alert-circle-outline",
+        text: `${this._t("vacuum_vacuum_error")}: ${vacError}`,
+        tone: "error",
+      });
+    }
+
+    if (on(d.binary.clean_water_box)) {
+      // The sensor is `clean_box_empty` — "on" is the bad news, not the good.
+      chips.push({
+        icon: "mdi:water-alert-outline",
+        text: this._t("vacuum_chip_clean_water_empty"),
+        tone: "warn",
+      });
+    }
+    if (on(d.binary.dirty_water_box)) {
+      chips.push({
+        icon: "mdi:delete-alert-outline",
+        text: this._t("vacuum_chip_dirty_water_full"),
+        tone: "warn",
+      });
+    }
+    if (on(d.binary.water_shortage)) {
+      chips.push({
+        icon: "mdi:water-off-outline",
+        text: this._t("vacuum_chip_water_shortage"),
+        tone: "warn",
+      });
+    }
+    if (on(d.binary.mop_drying)) {
+      chips.push({
+        icon: "mdi:weather-windy",
+        text: this._t("vacuum_chip_mop_drying"),
+        tone: "plain",
+      });
+    }
+    if (on(d.binary.mop_attached)) {
+      chips.push({
+        icon: "mdi:square-rounded-outline",
+        text: this._t("vacuum_chip_mop_attached"),
+        tone: "plain",
+      });
+    }
+
+    if (!chips.length) return nothing;
+    const max = this._config?.max_chips ?? VACUUM_MAX_CHIPS;
+    const errors = chips.filter((c) => c.tone === "error");
+    const rest = chips.filter((c) => c.tone !== "error");
+    const shown = [...errors, ...rest].slice(0, Math.max(errors.length, max));
+    const hidden = chips.length - shown.length;
+
+    return html`
+      <div class="chips">
+        ${shown.map(
+          (c) => html`
+            <span class="chip ${c.tone}">
+              <ha-icon icon=${c.icon}></ha-icon>
+              <span>${c.text}</span>
+            </span>
+          `,
+        )}
+        ${hidden > 0
+          ? html`<span class="chip plain"
+              >${this._t("vacuum_chip_more").replace("{n}", String(hidden))}</span
+            >`
+          : nothing}
+      </div>
+    `;
+  }
+
+  /** An enum sensor's state, localised, or nothing when it reads as fine. */
+  private _enumState(entityId: string | undefined): string | undefined {
+    if (!entityId) return undefined;
+    const state = this.hass?.states[entityId];
+    const raw = state?.state;
+    if (!raw || raw === "ok" || raw === "none" || raw === "unknown" || raw === "unavailable") {
+      return undefined;
+    }
+    return this.hass?.formatEntityState?.(state!) ?? raw;
+  }
+
   static styles = [
     glassCardStyles,
     levelSliderStyles,
@@ -744,6 +1089,120 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         border-radius: 12px;
         background: color-mix(in srgb, var(--m3v-accent) 16%, transparent);
         color: var(--m3v-accent);
+      }
+
+      .map {
+        position: relative;
+        border-radius: ${unsafeCSS(VACUUM_MAP_RADIUS)}px;
+        overflow: hidden;
+        cursor: pointer;
+        /* A faint ground so a map with transparent edges does not float on
+           whatever the card background happens to be. */
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 5%, transparent);
+        line-height: 0;
+      }
+
+      .map:focus-visible {
+        outline: 2px solid var(--m3v-accent);
+        outline-offset: 2px;
+      }
+
+      .map img {
+        width: 100%;
+        max-height: 220px;
+        object-fit: contain;
+      }
+
+      .map-chip {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        border-radius: ${unsafeCSS(VACUUM_MAP_CHIP_RADIUS)}px;
+        padding: 3px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        color: var(--m3p-text, var(--primary-text-color));
+        background: color-mix(in srgb, var(--ha-card-background, var(--card-background-color)) 74%, transparent);
+        backdrop-filter: blur(6px);
+      }
+
+      .scale-row {
+        --level-accent: var(--m3v-accent);
+        --level-ink: var(--m3v-ink);
+      }
+
+      .free-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .free-button {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 40px;
+        border: none;
+        border-radius: 20px;
+        padding: 0 14px;
+        background: color-mix(in srgb, var(--m3v-accent) 10%, transparent);
+        color: var(--m3v-accent);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        --mdc-icon-size: 18px;
+        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .free-button:active {
+        border-radius: 12px;
+      }
+
+      .free-button:disabled {
+        cursor: default;
+        opacity: 0.4;
+      }
+
+      .free-button span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: ${unsafeCSS(VACUUM_CHIP_GAP)}px;
+      }
+
+      .chip {
+        height: ${unsafeCSS(VACUUM_CHIP_HEIGHT)}px;
+        border-radius: ${unsafeCSS(VACUUM_CHIP_RADIUS)}px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        --mdc-icon-size: 15px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+      }
+
+      .chip.warn {
+        background: color-mix(in srgb, #f0a24a 16%, transparent);
+        color: #f0a24a;
+      }
+
+      /* Never collapsed into the overflow, and never quiet. */
+      .chip.error {
+        background: color-mix(in srgb, #e57368 18%, transparent);
+        color: #e57368;
       }
 
       .version {

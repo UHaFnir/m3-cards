@@ -54,6 +54,15 @@ export const LEVEL_HANDLE_HEIGHT = 28;
 export const LEVEL_HANDLE_RADIUS = 2;
 /** Either side of the handle. The gap is what makes it read as Expressive. */
 export const LEVEL_TRACK_GAP = 6;
+/**
+ * How far the handle's travel is pulled in from each end.
+ *
+ * Without it the handle is centred on 0% and 100%, so at either extreme half
+ * of it hangs outside the track — which is exactly where a slider spends most
+ * of its time on a vacuum that is set to max. Half the *pressed* width, so it
+ * stays inside in both states.
+ */
+export const LEVEL_EDGE_INSET = LEVEL_HANDLE_WIDTH_PRESSED / 2;
 export const LEVEL_STOP_SIZE = 4;
 export const LEVEL_ROW_HEIGHT = 44;
 
@@ -184,7 +193,7 @@ function renderTrack(fraction: number, count: number, active: number, pressed: b
             ? nothing
             : html`<span
                 class="level-stop ${i < active ? "on-fill" : ""}"
-                style=${`left: ${fractionOfStep(i, count) * 100}%;`}
+                style=${`--level-stop-fraction: ${fractionOfStep(i, count)};`}
               ></span>`,
         )}
       </div>
@@ -255,6 +264,11 @@ export const levelSliderStyles = css`
     position: relative;
     flex: 1;
     height: ${LEVEL_TRACK_HEIGHT}px;
+    /* Everything that follows a value positions itself with this, so the
+       handle, the two track halves and the stop dots cannot drift apart. */
+    --level-x: calc(
+      ${LEVEL_EDGE_INSET}px + var(--level-fraction) * (100% - ${LEVEL_EDGE_INSET * 2}px)
+    );
   }
 
   .level-fill,
@@ -269,13 +283,13 @@ export const levelSliderStyles = css`
   /* Active half: from the start to the handle, minus the gap. */
   .level-fill {
     left: 0;
-    right: calc(100% - var(--level-fraction) * 100% + ${LEVEL_TRACK_GAP}px);
+    right: calc(100% - var(--level-x) + ${LEVEL_TRACK_GAP}px);
     background: var(--level-accent, var(--primary-color));
   }
 
   /* Inactive half: from the handle to the end, minus the gap. */
   .level-rest {
-    left: calc(var(--level-fraction) * 100% + ${LEVEL_TRACK_GAP}px);
+    left: calc(var(--level-x) + ${LEVEL_TRACK_GAP}px);
     right: 0;
     background: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
   }
@@ -288,6 +302,9 @@ export const levelSliderStyles = css`
 
   .level-stop {
     position: absolute;
+    left: calc(
+      ${LEVEL_EDGE_INSET}px + var(--level-stop-fraction) * (100% - ${LEVEL_EDGE_INSET * 2}px)
+    );
     top: 50%;
     width: ${LEVEL_STOP_SIZE}px;
     height: ${LEVEL_STOP_SIZE}px;
@@ -305,7 +322,7 @@ export const levelSliderStyles = css`
   .level-handle {
     position: absolute;
     top: 50%;
-    left: calc(var(--level-fraction) * 100%);
+    left: var(--level-x);
     height: ${LEVEL_HANDLE_HEIGHT}px;
     border-radius: ${LEVEL_HANDLE_RADIUS}px;
     background: var(--level-accent, var(--primary-color));
