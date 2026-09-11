@@ -4478,6 +4478,25 @@ per device by default, per session with `collapse_memory: session`, or in an
 `input_boolean` via `collapse_state_entity`, which survives a different browser
 and lets an automation fold it.
 
+## Everything else, one tap away
+
+`popup` puts any Lovelace card behind the header — the maintenance card, the
+history, every routine the vendor's app has. The tile stays a summary and the
+detail stops competing with it for space.
+
+```yaml
+type: custom:m3-vacuum-card
+entity: vacuum.dobby
+popup:
+  size: wide
+  content:
+    type: custom:m3-vacuum-maintenance-card
+    entity: vacuum.dobby
+```
+
+With a popup configured, a tap on the header opens it instead of more-info; an
+explicit `tap_action` still wins over both.
+
 ## Naming states yourself
 
 `states` maps the vacuum's own state onto a label, an icon and a colour, first
@@ -4537,7 +4556,9 @@ something.
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. |
 | `max_chips` | number | `4` | How many chips before the rest collapse into "+n". Errors are never collapsed. |
-| `buttons` | list | — | Free buttons: `entity`, optional `name`, `icon`, `tap_action`. The service follows the entity's domain. |
+| `buttons` | list | — | Free buttons. The suite's chip buttons, so each takes `entity`, `name`, `icon`, `color`, `show_state`, `tap_action`, `hold_action`, `double_tap_action`. |
+| `buttons_wrap`, `buttons_stretch`, `buttons_justify` | — | wrap | Layout of that row, as on the chip-buttons card. |
+| `popup` | object | — | A popup with any card inside: `content`, optional `title` and `size` (`normal`, `wide`, `fullscreen`). A tap on the header opens it. |
 | `show_fan_speed` | boolean | `true` | The suction row. Hidden anyway when the vacuum reports fewer than two speeds. |
 | `secondary_actions` | list | `[return_to_base, locate]` | The two buttons beside the primary one: `return_to_base`, `locate`, `stop`. |
 | `optimistic_timeout` | number | `70000` | How long, in milliseconds, a tapped state is shown before the card stops waiting for confirmation. |

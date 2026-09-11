@@ -6,7 +6,6 @@ import type {
   LovelaceCard,
   LovelaceGridOptions,
   M3VacuumCardConfig,
-  VacuumButtonConfig,
   VacuumSecondaryAction,
 } from "./types";
 import {
@@ -47,8 +46,21 @@ import {
   levelSliderStyles,
   type LevelStep,
 } from "./shared/level-slider";
-import { runHaAction } from "./shared/actions";
 import { readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+// The scroll-fade controller for these rows arrives with PR #15; until it
+// lands the row scrolls without the edge hint, which is what the standalone
+// chip-buttons card did before that PR too.
+import { chipButtonsStyles, renderChipButtons } from "./shared/chip-buttons";
+import { DetailCardController } from "./shared/detail-card";
+import {
+  popupCardStyles,
+  renderPopupDialog,
+  shouldCloseOnBackdropClick,
+  syncDialogOpenState,
+  type PopupCardHandle,
+} from "./shared/popup-card";
+import { runHaAction, isActionable } from "./shared/actions";
+import { TapHoldGesture } from "./shared/gestures";
 import { findStateRule } from "./shared/state-rules";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { resolveCommonColors, resolveThemeColor, tintOn, inkOn } from "./shared/color-config";
@@ -99,6 +111,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _selectOptimistic: Record<string, string> = {};
   @state() private _pressedSelect?: string;
   @state() private _folded = false;
+  @state() private _pressedChip?: string;
+  @state() private _popupOpen = false;
+  @state() private _popupCardEl?: HTMLElement & PopupCardHandle;
+  private _popupOpenedAt = 0;
+  private readonly _popupCard = new DetailCardController();
+  private _chipGestures = new TapHoldGesture();
   private _selectTimers: Record<string, number> = {};
   /** The speed to return to when "mop only" is switched back off. */
   private _lastRealSpeed?: string;
@@ -143,6 +161,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     this._optimistic.clear();
+    this._popupCard.reset();
     if (this._fanSettle) clearTimeout(this._fanSettle);
     for (const t of Object.values(this._selectTimers)) clearTimeout(t);
     this._selectTimers = {};
@@ -176,6 +195,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   };
 
   protected updated(): void {
+    this._maybeSyncPopupCard();
+    if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
+    if (this._popupOpen !== undefined) {
+      const dialog = this.renderRoot?.querySelector("dialog") as HTMLDialogElement | null;
+      syncDialogOpenState(dialog, this._popupOpen);
+    }
     if (!this._config?.collapsible) return;
     // An entity-backed fold can be changed from another dashboard or by an
     // automation, so it is re-read rather than only written on a tap.
@@ -429,6 +454,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
             : nothing}
         </div>
       </ha-card>
+      ${this._renderPopup()}
     `;
   }
 
@@ -445,8 +471,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
           role="button"
           tabindex="0"
           aria-label=${name}
-          @click=${() => this._fireMoreInfo(cfg.entity)}
-          @keydown=${activateOnKey(() => this._fireMoreInfo(cfg.entity))}
+          @click=${() => this._headerTap()}
+          @keydown=${activateOnKey(() => this._headerTap())}
         >
           <ha-icon
             icon=${cfg.icon ?? this._stateRule()?.icon ?? activityIcon(activity) ?? DEFAULT_VACUUM_ICON}
@@ -769,70 +795,111 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   // ---- free buttons -----------------------------------------------------------
 
   /**
-   * Buttons the config names, for whatever the vacuum's integration exposes
-   * that this card cannot know about — app routines, scripts, scenes. The
-   * service is chosen from the entity's domain, so the common case needs no
-   * `tap_action` at all.
+   * Buttons the config names, for whatever the integration exposes that this
+   * card cannot know about — app routines, a script, a scene.
+   *
+   * These are the suite's chip buttons, not a private copy: they arrive with
+   * the theme's own state colours, hold and double-tap actions, the scrolling
+   * row with its edge fades, and the swipe shield. A vacuum from another brand
+   * is then a config change rather than a code one.
    */
   private _renderButtons(unavailable: boolean) {
     const buttons = this._config?.buttons;
-    if (!buttons?.length) return nothing;
+    if (!buttons?.length || !this.hass) return nothing;
     return html`
-      <div class="free-buttons">
-        ${buttons.map((cfg) => this._renderFreeButton(cfg, unavailable))}
+      <div class="free-buttons ${unavailable ? "dimmed" : ""}">
+        ${renderChipButtons(
+          this,
+          this.hass,
+          {
+            buttons,
+            wrap: this._config?.buttons_wrap ?? true,
+            stretch: this._config?.buttons_stretch,
+            justify: this._config?.buttons_justify,
+          },
+          {
+            pressedKey: this._pressedChip,
+            gestures: this._chipGestures,
+            onPressChange: (key) => {
+              this._pressedChip = key;
+            },
+          },
+        )}
       </div>
     `;
   }
 
-  private _renderFreeButton(cfg: VacuumButtonConfig, unavailable: boolean) {
-    const state = cfg.entity ? this.hass?.states[cfg.entity] : undefined;
-    const name = cfg.name ?? state?.attributes.friendly_name ?? cfg.entity ?? "";
-    const missing = !!cfg.entity && !state;
-    return html`
-      <button
-        class="free-button"
-        ?disabled=${unavailable || missing}
-        title=${missing ? `${cfg.entity} ${this._t("vacuum_unavailable")}` : name}
-        @click=${() => this._pressFreeButton(cfg)}
-      >
-        ${cfg.icon ? html`<ha-icon icon=${cfg.icon}></ha-icon>` : nothing}
-        <span>${name}</span>
-      </button>
-    `;
-  }
+  // ---- popup ------------------------------------------------------------------
 
-  private _pressFreeButton(cfg: VacuumButtonConfig): void {
-    if (cfg.tap_action) {
-      this._runConfiguredAction(cfg.tap_action, cfg.entity);
+  private _openPopup(): void {
+    if (!this._config?.popup) {
+      this._fireMoreInfo(this._config?.entity);
       return;
     }
-    if (!cfg.entity || !this.hass) return;
-    const domain = cfg.entity.split(".")[0];
-    // One sensible press per domain, so a routine button, a script and a scene
-    // all just work without the user learning a service name.
-    const service: Record<string, string> = {
-      button: "press",
-      input_button: "press",
-      script: "turn_on",
-      scene: "turn_on",
-      switch: "toggle",
-      input_boolean: "toggle",
-      automation: "trigger",
-      vacuum: "start",
-    };
-    const call = service[domain];
-    if (!call) {
-      this._fireMoreInfo(cfg.entity);
-      return;
-    }
-    this.hass.callService(domain, call, { entity_id: cfg.entity });
+    this._popupOpenedAt = Date.now();
+    this._popupOpen = true;
   }
 
-  private _runConfiguredAction(action: HaActionConfig, entityId: string | undefined): void {
-    if (!this.hass) return;
+  private _closePopup(): void {
+    this._popupOpen = false;
+    this._popupCardEl = undefined;
+    this._popupCard.reset();
+  }
+
+  // createCardElement() is async, so the build runs from updated() and
+  // render() stays synchronous.
+  private _maybeSyncPopupCard(): void {
+    const popup = this._config?.popup;
+    if (!this._popupOpen || !popup || !this.hass) {
+      this._popupCard.reset();
+      return;
+    }
+    this._popupCard.sync({
+      skeleton: popup.content,
+      tokens: { entity_id: this._config?.entity, name: this._config?.name },
+      hass: this.hass,
+      onChange: (el) => {
+        this._popupCardEl = el;
+      },
+    });
+  }
+
+  private _renderPopup() {
+    const popup = this._config?.popup;
+    if (!this._popupOpen || !popup) return nothing;
+    const name =
+      this._config?.name ??
+      this.hass?.states[this._config!.entity]?.attributes.friendly_name ??
+      this._config!.entity;
+    return renderPopupDialog({
+      content: this._popupCardEl,
+      title: popup.title ?? name,
+      size: popup.size,
+      onClose: () => this._closePopup(),
+      onBackdropClick: (e) => {
+        if (shouldCloseOnBackdropClick(e, this._popupOpenedAt)) this._closePopup();
+      },
+      closeLabel: this._t("dialog_close"),
+    });
+  }
+
+  /**
+   * The header's tap. A configured popup takes it, so the common case needs
+   * no `tap_action`; an explicit one still wins, and more-info stays the
+   * fallback it has always been.
+   */
+  private _headerTap(): void {
+    const action =
+      this._config?.tap_action ??
+      (this._config?.popup ? ({ action: "popup" } as HaActionConfig) : undefined);
+    if (!action) {
+      this._fireMoreInfo(this._config?.entity);
+      return;
+    }
+    if (!isActionable(action) || !this.hass) return;
     runHaAction(this.hass, action, {
-      entityId: entityId ?? this._config!.entity,
-      openPopup: () => this._fireMoreInfo(entityId ?? this._config!.entity),
+      entityId: this._config!.entity,
+      openPopup: () => this._openPopup(),
       fireMoreInfo: (id) => this._fireMoreInfo(id),
       navigate: (path) => {
         window.history.pushState(null, "", path);
@@ -962,6 +1029,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   static styles = [
     glassCardStyles,
     levelSliderStyles,
+    chipButtonsStyles,
+    popupCardStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -1222,46 +1291,9 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         --level-ink: var(--m3v-ink);
       }
 
-      .free-buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-
-      .free-button {
-        flex: 1 1 auto;
-        min-width: 0;
-        height: 40px;
-        border: none;
-        border-radius: 20px;
-        padding: 0 14px;
-        background: color-mix(in srgb, var(--m3v-accent) 10%, transparent);
-        color: var(--m3v-accent);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        font-family: inherit;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-        --mdc-icon-size: 18px;
-        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)};
-      }
-
-      .free-button:active {
-        border-radius: 12px;
-      }
-
-      .free-button:disabled {
-        cursor: default;
+      .free-buttons.dimmed {
         opacity: 0.4;
-      }
-
-      .free-button span {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        pointer-events: none;
       }
 
       .chips {

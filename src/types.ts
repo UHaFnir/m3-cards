@@ -811,10 +811,14 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
   /**
    * Free buttons, for anything the vacuum's own integration exposes that this
    * card cannot know about — Roborock's app routines, a Valetudo script, a
-   * scene. Each one is an entity plus how to press it, so a brand with an
-   * entirely different vocabulary is a config change rather than a code one.
+   * scene. The same chips the button and chip-buttons cards use, so they get
+   * state colours, hold actions and the scrolling row for free.
    */
-  buttons?: VacuumButtonConfig[];
+  buttons?: ChipButtonConfig[];
+  /** Layout of the button row, as on the chip-buttons card. */
+  buttons_wrap?: boolean;
+  buttons_stretch?: boolean;
+  buttons_justify?: "start" | "center" | "end" | "space-between";
 
   /**
    * How long a tapped state is shown before the card gives up waiting for the
@@ -824,6 +828,12 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
   optimistic_timeout?: number;
 
   tap_action?: HaActionConfig;
+  /**
+   * The card's own popup: any Lovelace card, in the shared popup chrome.
+   * A tile is a summary; the full set of controls, the history and the
+   * maintenance card belong one tap away rather than on the dashboard.
+   */
+  popup?: VacuumPopupConfig;
   accent_color?: string;
   accent_opacity?: number;
   text_color?: string;
@@ -836,18 +846,15 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
   card_version?: string;
 }
 
-export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
-
-export interface VacuumButtonConfig {
-  /** Pressed with the service that fits its domain, unless `tap_action` says
-   *  otherwise: `button.press`, `script.turn_on`, `scene.turn_on`,
-   *  `switch.toggle`, `automation.trigger`. */
-  entity?: string;
-  name?: string;
-  icon?: string;
-  /** Overrides the automatic service entirely. */
-  tap_action?: HaActionConfig;
+export interface VacuumPopupConfig {
+  /** Shown in the popup's top bar. Falls back to the card's name. */
+  title?: string;
+  size?: PopupSize;
+  /** `[[entity_id]]` and `[[name]]` in it resolve to this card's. */
+  content: Record<string, unknown>;
 }
+
+export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
 
 export interface M3WeatherCardConfig {
   type: string;
