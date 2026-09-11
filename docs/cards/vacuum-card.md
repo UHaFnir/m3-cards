@@ -61,6 +61,13 @@ something.
 | `entity` | string | — | **Required.** The `vacuum` entity. |
 | `name` | string | entity name | Header title. |
 | `icon` | string | follows the state | Overrides the header icon. |
+| `show_map` | boolean | `true` | The live map preview. |
+| `map_height` | number | `300` | Height of the map preview in px. The picture is letterboxed inside it, so this is what decides how large the floor plan reads. |
+| `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
+| `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
+| `show_station_chips` | boolean | `true` | The dock and mop status chips. |
+| `max_chips` | number | `4` | How many chips before the rest collapse into "+n". Errors are never collapsed. |
+| `buttons` | list | — | Free buttons: `entity`, optional `name`, `icon`, `tap_action`. The service follows the entity's domain. |
 | `show_fan_speed` | boolean | `true` | The suction row. Hidden anyway when the vacuum reports fewer than two speeds. |
 | `secondary_actions` | list | `[return_to_base, locate]` | The two buttons beside the primary one: `return_to_base`, `locate`, `stop`. |
 | `optimistic_timeout` | number | `70000` | How long, in milliseconds, a tapped state is shown before the card stops waiting for confirmation. |

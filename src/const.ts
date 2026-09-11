@@ -2084,6 +2084,14 @@ export const VACUUM_MAX_CHIPS = 4;
 
 /** Map preview. */
 export const VACUUM_MAP_RADIUS = 20;
+/**
+ * How tall the map may get. The picture is letterboxed inside this — a
+ * Roborock map is wider than it is tall and carries transparent margins of
+ * its own — so this number, not the card's width, is what decides how big the
+ * floor plan actually looks. 220px left it a stamp in the middle of a lot of
+ * nothing; `map_height` tunes it per card.
+ */
+export const VACUUM_MAP_HEIGHT = 300;
 export const VACUUM_MAP_CHIP_RADIUS = 9;
 /** Tied to the integration's own polling cadence — refreshing faster only
  *  re-fetches the same picture. */

@@ -17,6 +17,7 @@ import {
   VACUUM_CHIP_HEIGHT,
   VACUUM_CHIP_RADIUS,
   VACUUM_MAP_CHIP_RADIUS,
+  VACUUM_MAP_HEIGHT,
   VACUUM_MAP_RADIUS,
   VACUUM_MAX_CHIPS,
   VACUUM_BATTERY_HEIGHT,
@@ -613,6 +614,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     return html`
       <div
         class="map"
+        style=${`--m3v-map-height: ${this._config?.map_height ?? VACUUM_MAP_HEIGHT}px;`}
         role="button"
         tabindex="0"
         aria-label=${this._t("vacuum_map")}
@@ -1108,8 +1110,11 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       }
 
       .map img {
+        display: block;
         width: 100%;
-        max-height: 220px;
+        height: var(--m3v-map-height, ${unsafeCSS(VACUUM_MAP_HEIGHT)}px);
+        /* contain, never cover: cropping a floor plan hides rooms, and the
+           whole point of the picture is where the vacuum has been. */
         object-fit: contain;
       }
 

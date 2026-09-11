@@ -773,6 +773,8 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
 
   /** Blocks. Each also disappears on its own when its entities are missing. */
   show_map?: boolean;
+  /** Height of the map preview in px. Defaults to 300. */
+  map_height?: number;
   show_progress?: boolean;
   show_rooms?: boolean;
   show_fan_speed?: boolean;
@@ -897,6 +899,8 @@ export interface M3PresenceCardConfig {
   show_distance?: boolean;
   show_since?: boolean;
   show_map?: boolean;
+  /** Height of the map preview in px. Defaults to 300. */
+  map_height?: number;
   sort?: PresenceSortMode;
   home_color?: string;
   not_home_color?: string;
