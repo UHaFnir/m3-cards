@@ -39,3 +39,4 @@ export * from "./m3-chip-buttons-card";
 export * from "./m3-group-card";
 export * from "./m3-appliance-card";
 export * from "./m3-search-card";
+export * from "./m3-vacuum-card";

@@ -2019,3 +2019,87 @@ export const SEARCH_PRESSED_TINT = 6;
 /** How long the pressed wash stays after a tap that opens a dialog. The dialog
  *  takes the focus, so without a timer the bar would stay lit behind it. */
 export const SEARCH_FEEDBACK_MS = 180;
+
+// ---- m3-vacuum-card ---------------------------------------------------------
+// The vacuum is a control surface first: a big primary button, a row of
+// modes, and a state colour. Its sizes come from the appliance card, which is
+// the other card in the suite built around "one device, several blocks".
+
+export const DEFAULT_VACUUM_RADIUS = RADIUS.card;
+export const DEFAULT_VACUUM_ICON = "mdi:robot-vacuum";
+
+/** Header squircle. One step up from the appliance card's — the vacuum's
+ *  header carries a state colour that should read across a room. */
+export const VACUUM_ICON_SIZE = 46;
+export const VACUUM_ICON_RADIUS = 17;
+export const VACUUM_ICON_TINT = 16;
+
+export const VACUUM_NAME_SIZE = 15;
+export const VACUUM_STATUS_SIZE = 12;
+
+/** Battery chip in the header's trailing slot. */
+export const VACUUM_BATTERY_HEIGHT = 30;
+export const VACUUM_BATTERY_RADIUS = 15;
+/** Above this the chip is green, above the second it is amber, below it red.
+ *  Not a vendor threshold — the point where a Roborock can still finish a
+ *  room and the point where it will dock mid-run. */
+export const VACUUM_BATTERY_OK = 40;
+export const VACUUM_BATTERY_LOW = 15;
+
+/** Primary action button. Tall enough to be the obvious target on a phone. */
+export const VACUUM_PRIMARY_HEIGHT = 56;
+export const VACUUM_PRIMARY_RADIUS = 18;
+/** Pausing morphs the button rounder — the shape says "held", not "stopped". */
+export const VACUUM_PRIMARY_RADIUS_PAUSED = 28;
+export const VACUUM_SECONDARY_WIDTH = 60;
+export const VACUUM_SECONDARY_RADIUS = 26;
+export const VACUUM_SECONDARY_TINT = 8;
+/** How far the primary button dims while it is showing a state the vacuum has
+ *  not confirmed yet. Enough to read as "working on it", not as "disabled". */
+export const VACUUM_PENDING_OPACITY = 0.62;
+
+/** Fan-speed pills, and the four bars drawn inside them. */
+export const VACUUM_FAN_HEIGHT = 42;
+export const VACUUM_FAN_RADIUS = 21;
+export const VACUUM_FAN_RADIUS_ACTIVE = 12;
+export const VACUUM_FAN_TINT = 14;
+export const VACUUM_FAN_BAR_WIDTH = 2.5;
+export const VACUUM_FAN_BAR_RADIUS = 1.5;
+export const VACUUM_FAN_LABEL_SIZE = 9;
+
+/** Room chips. */
+export const VACUUM_ROOM_HEIGHT = 32;
+export const VACUUM_ROOM_RADIUS = 16;
+export const VACUUM_ROOM_RADIUS_ACTIVE = 10;
+
+/** Mop-intensity pills. Slightly shorter than the fan row: it is the second
+ *  choice on the card, not a competing one. */
+export const VACUUM_MOP_HEIGHT = 40;
+export const VACUUM_MOP_RADIUS = 20;
+export const VACUUM_MOP_RADIUS_ACTIVE = 12;
+export const VACUUM_MOP_TINT = 28;
+
+/** Station chips. */
+export const VACUUM_CHIP_HEIGHT = 30;
+export const VACUUM_CHIP_RADIUS = 15;
+export const VACUUM_CHIP_GAP = 8;
+export const VACUUM_MAX_CHIPS = 4;
+
+/** Map preview. */
+export const VACUUM_MAP_RADIUS = 20;
+export const VACUUM_MAP_CHIP_RADIUS = 9;
+/** Tied to the integration's own polling cadence — refreshing faster only
+ *  re-fetches the same picture. */
+export const VACUUM_MAP_REFRESH_MS = 30_000;
+
+/** How long the card keeps showing a state it asked for. Two polls' worth, so
+ *  a single missed update does not snap the button back. */
+export const VACUUM_OPTIMISTIC_MS = 70_000;
+
+/** Progress wave, matching the appliance card's bar so the two read as one
+ *  family when they sit on the same dashboard. */
+export const VACUUM_WAVE_STROKE = 6;
+export const VACUUM_WAVE_AMPLITUDE = 2.4;
+export const VACUUM_WAVE_WAVELENGTH = 20;
+export const VACUUM_WAVE_GAP = 8;
+export const VACUUM_WAVE_SVG_HEIGHT = 16;

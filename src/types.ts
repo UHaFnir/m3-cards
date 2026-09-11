@@ -745,6 +745,70 @@ export type WeatherChipType =
   | "uv_index"
   | "visibility";
 
+/**
+ * Which companion entities the card was told about explicitly. Anything left
+ * out is looked up on the vacuum's own device — see shared/vacuum.ts — so the
+ * common case needs nothing but `entity`.
+ */
+export interface VacuumEntityOverrides {
+  map_entity?: string;
+  mop_mode_entity?: string;
+  mop_intensity_entity?: string;
+  empty_mode_entity?: string;
+  progress_entity?: string;
+  area_entity?: string;
+  time_entity?: string;
+  status_entity?: string;
+  dnd_switch?: string;
+  child_lock_switch?: string;
+  volume_entity?: string;
+}
+
+export interface M3VacuumCardConfig extends VacuumEntityOverrides {
+  type: string;
+  /** The `vacuum` entity. Everything else is optional. */
+  entity: string;
+  name?: string;
+  icon?: string;
+
+  /** Blocks. Each also disappears on its own when its entities are missing. */
+  show_map?: boolean;
+  show_progress?: boolean;
+  show_rooms?: boolean;
+  show_fan_speed?: boolean;
+  show_mop_intensity?: boolean;
+  show_mop_mode?: boolean;
+  show_station_chips?: boolean;
+
+  /**
+   * Which two controls sit beside the primary button. `rooms` turns the
+   * second one into a toggle for the room chips rather than a service call.
+   */
+  secondary_actions?: VacuumSecondaryAction[];
+  max_chips?: number;
+
+  /**
+   * How long a tapped state is shown before the card gives up waiting for the
+   * poll to confirm it. Only worth touching on an integration slower than
+   * Roborock's 30 seconds.
+   */
+  optimistic_timeout?: number;
+
+  tap_action?: HaActionConfig;
+  accent_color?: string;
+  accent_opacity?: number;
+  text_color?: string;
+  secondary_text_color?: string;
+  card_background?: string;
+  glass_background?: boolean;
+  animation?: "auto" | "on" | "off";
+  radius?: number;
+  corners?: CornerRadiusConfig;
+  card_version?: string;
+}
+
+export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
+
 export interface M3WeatherCardConfig {
   type: string;
   entity: string;
