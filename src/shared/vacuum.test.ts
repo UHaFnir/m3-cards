@@ -3,6 +3,7 @@ import {
   OptimisticActivity,
   activityColor,
   discoverVacuum,
+  findDockDevice,
   fanBarsLit,
   fanSpeedKey,
   optimisticActivity,
@@ -167,15 +168,27 @@ describe("fanSpeedKey", () => {
 // --- discovery ---------------------------------------------------------------
 
 function fakeHass(
-  entities: Record<string, { device_id?: string; translation_key?: string }>,
+  entities: Record<
+    string,
+    { device_id?: string; translation_key?: string; device_class?: string }
+  >,
+  devices: Record<string, string> = {},
 ): HomeAssistant {
   const states: Record<string, unknown> = {};
   const registry: Record<string, unknown> = {};
   for (const [entityId, entry] of Object.entries(entities)) {
-    states[entityId] = { state: "on", attributes: {} };
+    states[entityId] = {
+      state: "on",
+      attributes: entry.device_class ? { device_class: entry.device_class } : {},
+    };
     registry[entityId] = { entity_id: entityId, ...entry };
   }
-  return { states, entities: registry } as unknown as HomeAssistant;
+  // devices maps device_id -> its roborock identifier
+  const devs: Record<string, unknown> = {};
+  for (const [id, duid] of Object.entries(devices)) {
+    devs[id] = { id, identifiers: [["roborock", duid]] };
+  }
+  return { states, entities: registry, devices: devs } as unknown as HomeAssistant;
 }
 
 describe("discoverVacuum", () => {
@@ -257,5 +270,110 @@ describe("discoverVacuum", () => {
     const found = discoverVacuum(hass, "vacuum.sushi");
     expect(found.mopMode).toBe("select.sushi_mop_mode");
     expect(found.mopIntensity).toBe("select.sushi_mop_intensity");
+  });
+});
+
+
+describe("discoverVacuum — the dock is a second device", () => {
+  // Roborock registers the dock separately and links it by neither
+  // via_device nor parent_device. Everything below would be missing from the
+  // card if the walk stopped at the vacuum's own device.
+  const hass = () =>
+    fakeHass(
+      {
+        "vacuum.dobby": { device_id: "vac" },
+        "binary_sensor.dobby_dock_schmutzwassertank": {
+          device_id: "dock",
+          translation_key: "dirty_box_full",
+        },
+        "binary_sensor.dobby_dock_frischwassertank": {
+          device_id: "dock",
+          translation_key: "clean_box_empty",
+        },
+        "select.dobby_dock_entleerungsmodus": {
+          device_id: "dock",
+          translation_key: "dust_collection_mode",
+        },
+        "sensor.dobby_dock_burstenwartung": {
+          device_id: "dock",
+          translation_key: "cleaning_brush_time_left",
+        },
+        "sensor.dobby_dock_ladestation_fehler": {
+          device_id: "dock",
+          translation_key: "dock_error",
+        },
+        "switch.dobby_dock_moppwasche": { device_id: "dock", translation_key: "mop_washing" },
+        "switch.dobby_kindersicherung": { device_id: "dock", translation_key: "child_lock" },
+      },
+      { vac: "ABC123", dock: "ABC123_dock" },
+    );
+
+  it("finds the dock through the <duid>_dock identifier", () => {
+    expect(findDockDevice(hass(), "vac")).toBe("dock");
+  });
+
+  it("collects the dock's entities alongside the vacuum's own", () => {
+    const found = discoverVacuum(hass(), "vacuum.dobby");
+    expect(found.dockDeviceId).toBe("dock");
+    expect(found.binary.dirty_water_box).toBe("binary_sensor.dobby_dock_schmutzwassertank");
+    expect(found.binary.clean_water_box).toBe("binary_sensor.dobby_dock_frischwassertank");
+    expect(found.emptyMode).toBe("select.dobby_dock_entleerungsmodus");
+    expect(found.consumables.maintenance_brush).toBe("sensor.dobby_dock_burstenwartung");
+    expect(found.dockError).toBe("sensor.dobby_dock_ladestation_fehler");
+    expect(found.switches.mop_washing).toBe("switch.dobby_dock_moppwasche");
+    expect(found.childLock).toBe("switch.dobby_kindersicherung");
+  });
+
+  it("does not claim another vacuum's dock", () => {
+    const h = fakeHass(
+      {
+        "vacuum.dobby": { device_id: "vac" },
+        "switch.other_dock_moppwasche": { device_id: "dock2", translation_key: "mop_washing" },
+      },
+      { vac: "ABC123", dock2: "XYZ789_dock" },
+    );
+    expect(findDockDevice(h, "vac")).toBeUndefined();
+    expect(discoverVacuum(h, "vacuum.dobby").switches.mop_washing).toBeUndefined();
+  });
+
+  it("copes with a vacuum that has no dock", () => {
+    const h = fakeHass({ "vacuum.dobby": { device_id: "vac" } }, { vac: "ABC123" });
+    expect(findDockDevice(h, "vac")).toBeUndefined();
+    expect(discoverVacuum(h, "vacuum.dobby").dockDeviceId).toBeUndefined();
+  });
+});
+
+describe("discoverVacuum — the keys a real S7 Pro Ultra reports", () => {
+  it("matches the ones that differ from the obvious guess", () => {
+    const h = fakeHass(
+      {
+        "vacuum.dobby": { device_id: "vac" },
+        "binary_sensor.dobby_reinigen": { device_id: "vac", translation_key: "in_cleaning" },
+        "switch.dobby_nicht_storen": { device_id: "vac", translation_key: "dnd_switch" },
+        "select.dobby_route": { device_id: "vac", translation_key: "mop_mode" },
+        "select.dobby_reinigungsmodus": { device_id: "vac", translation_key: "cleaning_mode" },
+        "sensor.dobby_aktueller_raum": { device_id: "vac", translation_key: "current_room" },
+      },
+      { vac: "ABC123" },
+    );
+    const found = discoverVacuum(h, "vacuum.dobby");
+    expect(found.binary.cleaning).toBe("binary_sensor.dobby_reinigen");
+    expect(found.dnd).toBe("switch.dobby_nicht_storen");
+    expect(found.mopMode).toBe("select.dobby_route");
+    expect(found.cleaningMode).toBe("select.dobby_reinigungsmodus");
+    expect(found.currentRoom).toBe("sensor.dobby_aktueller_raum");
+  });
+
+  it("finds the charging sensor by device class, since it carries no key", () => {
+    const h = fakeHass(
+      {
+        "vacuum.dobby": { device_id: "vac" },
+        "binary_sensor.dobby_ladestatus": { device_id: "vac", device_class: "battery_charging" },
+      },
+      { vac: "ABC123" },
+    );
+    expect(discoverVacuum(h, "vacuum.dobby").binary.charging).toBe(
+      "binary_sensor.dobby_ladestatus",
+    );
   });
 });

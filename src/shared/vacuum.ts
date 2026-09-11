@@ -209,6 +209,8 @@ export class OptimisticActivity {
  */
 export interface DiscoveredVacuum {
   deviceId?: string;
+  /** The dock, when the vacuum has one. A separate device — see below. */
+  dockDeviceId?: string;
   map?: string;
   mopMode?: string;
   mopIntensity?: string;
@@ -218,6 +220,8 @@ export interface DiscoveredVacuum {
   area?: string;
   time?: string;
   status?: string;
+  currentRoom?: string;
+  cleaningMode?: string;
   dockError?: string;
   vacuumError?: string;
   mopDryingRemaining?: string;
@@ -255,25 +259,35 @@ function matches(entry: RegistryEntry, keys: string[]): boolean {
   return keys.some((k) => suffix === k || suffix.endsWith(`_${k}`));
 }
 
+// The keys below are the ones a Roborock S7 Pro Ultra actually reports,
+// verified against a live instance rather than taken from the documentation.
+// Several differ from the obvious guess — `dirty_box_full` rather than
+// `dirty_water_box`, `dust_collection_mode` rather than `empty_mode`,
+// `cleaning_brush_time_left` rather than `maintenance_brush_time_left` — so
+// each list keeps the plausible alternatives for firmware that words them
+// differently.
 const CONSUMABLE_KEYS: Record<string, string[]> = {
   main_brush: ["main_brush_time_left", "main_brush_left", "main_brush"],
   side_brush: ["side_brush_time_left", "side_brush_left", "side_brush"],
   filter: ["filter_time_left", "filter_left", "filter"],
   sensor: ["sensor_time_left", "sensor_dirty_left", "sensor_left"],
   strainer: ["strainer_time_left", "strainer_left"],
-  maintenance_brush: ["maintenance_brush_time_left", "maintenance_brush_left"],
+  maintenance_brush: [
+    "cleaning_brush_time_left",
+    "maintenance_brush_time_left",
+    "maintenance_brush_left",
+  ],
 };
 
 const BINARY_KEYS: Record<string, string[]> = {
-  charging: ["charging"],
-  cleaning: ["cleaning"],
+  cleaning: ["in_cleaning", "cleaning"],
   mop_attached: ["mop_attached"],
   mop_drying: ["mop_drying_status", "mop_drying"],
   water_box_attached: ["water_box_attached"],
   water_shortage: ["water_shortage"],
   cleaning_fluid: ["cleaning_fluid", "cleaning_fluid_status"],
-  clean_water_box: ["clean_water_box"],
-  dirty_water_box: ["dirty_water_box"],
+  clean_water_box: ["clean_box_empty", "clean_water_box"],
+  dirty_water_box: ["dirty_box_full", "dirty_water_box"],
 };
 
 const SWITCH_KEYS: Record<string, string[]> = {
@@ -306,8 +320,18 @@ export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): Dis
   if (!deviceId) return found;
   found.deviceId = deviceId;
 
+  // The dock is a *second* device, and not linked by `via_device` or
+  // `parent_device` — both are null. What does link them is the identifier:
+  // the vacuum is `roborock:<duid>` and its dock is `roborock:<duid>_dock`.
+  // Without this half the card is missing: the water tanks, the dust
+  // emptying and mop washing switches, the dock's own maintenance counters
+  // and the dock error all live over there.
+  const dockId = findDockDevice(hass, deviceId);
+  found.dockDeviceId = dockId;
+
+  const deviceIds = new Set([deviceId, dockId].filter(Boolean) as string[]);
   const siblings = Object.values(registry).filter(
-    (e) => e.device_id === deviceId && hass.states[e.entity_id],
+    (e) => e.device_id && deviceIds.has(e.device_id) && hass.states[e.entity_id],
   );
   const inDomain = (domain: string) =>
     siblings.filter((e) => e.entity_id.startsWith(`${domain}.`));
@@ -322,13 +346,15 @@ export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): Dis
 
   found.mopMode = pick("select", ["mop_mode"]);
   found.mopIntensity = pick("select", ["mop_intensity"]);
-  found.emptyMode = pick("select", ["empty_mode"]);
+  found.cleaningMode = pick("select", ["cleaning_mode"]);
+  found.emptyMode = pick("select", ["dust_collection_mode", "empty_mode"]);
   found.selectedMap = pick("select", ["selected_map"]);
 
   found.progress = pick("sensor", ["cleaning_progress"]);
   found.area = pick("sensor", ["cleaning_area"]);
   found.time = pick("sensor", ["cleaning_time"]);
   found.status = pick("sensor", ["status"]);
+  found.currentRoom = pick("sensor", ["current_room"]);
   found.dockError = pick("sensor", ["dock_error"]);
   found.vacuumError = pick("sensor", ["vacuum_error", "error"]);
   found.mopDryingRemaining = pick("sensor", ["mop_drying_remaining_time"]);
@@ -342,6 +368,12 @@ export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): Dis
     const hit = pick("binary_sensor", keys);
     if (hit) found.binary[what] = hit;
   }
+  // The charging sensor carries no translation key at all, so it is matched
+  // on its device class instead — the one thing about it that is declared.
+  const charging = inDomain("binary_sensor").find(
+    (e) => hass.states[e.entity_id]?.attributes?.device_class === "battery_charging",
+  );
+  if (charging) found.binary.charging = charging.entity_id;
   for (const [what, keys] of Object.entries(SWITCH_KEYS)) {
     const hit = pick("switch", keys);
     if (hit) found.switches[what] = hit;
@@ -353,7 +385,7 @@ export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): Dis
 
   found.volume = pick("number", ["volume"]);
   found.childLock = pick("switch", ["child_lock"]);
-  found.dnd = pick("switch", ["do_not_disturb"]);
+  found.dnd = pick("switch", ["dnd_switch", "do_not_disturb"]);
 
   return found;
 }
@@ -382,6 +414,7 @@ export function fanBarsLit(index: number, total: number): number {
  * translation. Anything else is shown as the integration wrote it.
  */
 export const FAN_SPEED_KEYS = [
+  "quiet",
   "silent",
   "balanced",
   "turbo",
@@ -402,4 +435,32 @@ export function fanSpeedKey(value: string): string | undefined {
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_");
   return (FAN_SPEED_KEYS as readonly string[]).includes(norm) ? norm : undefined;
+}
+
+
+/**
+ * The dock that belongs to a vacuum, found by identifier.
+ *
+ * Roborock registers the dock as its own device with no `via_device` and no
+ * `parent_device` — both are null — so the device tree says nothing about the
+ * relationship. The identifier does: `roborock:<duid>` for the vacuum,
+ * `roborock:<duid>_dock` for its dock. Matching the config entry instead would
+ * be wrong as soon as an account holds two vacuums.
+ */
+export function findDockDevice(hass: HomeAssistant, vacuumDeviceId: string): string | undefined {
+  const devices = hass.devices as unknown as
+    | Record<string, { id?: string; identifiers?: [string, string][] }>
+    | undefined;
+  if (!devices) return undefined;
+  const own = devices[vacuumDeviceId]?.identifiers ?? [];
+  const duid = own.find(([domain]) => domain === "roborock")?.[1];
+  if (!duid) return undefined;
+  for (const [id, device] of Object.entries(devices)) {
+    if (id === vacuumDeviceId) continue;
+    const match = (device.identifiers ?? []).some(
+      ([domain, value]) => domain === "roborock" && value === `${duid}_dock`,
+    );
+    if (match) return id;
+  }
+  return undefined;
 }
