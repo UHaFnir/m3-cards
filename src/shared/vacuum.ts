@@ -117,6 +117,12 @@ export const VACUUM_FEATURE = {
   MAP: 2048,
   STATE: 4096,
   START: 8192,
+  /**
+   * Cleaning named areas. Added after the others, and the bit a Roborock S7
+   * Pro Ultra reports that the documented list does not mention — it is what
+   * `vacuum.clean_area` targets on.
+   */
+  CLEAN_AREA: 16384,
 } as const;
 
 export type VacuumFeature = keyof typeof VACUUM_FEATURE;

@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
   LovelaceCard,
+  LovelaceCardEditor,
   LovelaceGridOptions,
   M3VacuumMaintenanceCardConfig,
   VacuumConsumableConfig,
@@ -74,6 +75,13 @@ export class M3VacuumMaintenanceCard
 
   private _discovered?: DiscoveredVacuum;
   private _discoveredFor?: string;
+
+  public static async getConfigElement(): Promise<LovelaceCardEditor> {
+    await import("./m3-vacuum-maintenance-card-editor");
+    return document.createElement(
+      "m3-vacuum-maintenance-card-editor",
+    ) as unknown as LovelaceCardEditor;
+  }
 
   public static getStubConfig(hass: HomeAssistant): M3VacuumMaintenanceCardConfig {
     const entity = Object.keys(hass.states).find((e) => e.startsWith("vacuum."));

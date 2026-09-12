@@ -4467,6 +4467,25 @@ The suction pills draw four rising bars rather than spelling the level out.
 The names are vendor vocabulary — "Balanced", "Turbo", "Max+", "Custom" — which
 does not sort, does not translate consistently and does not fit a 42px pill.
 
+## Sending it to rooms
+
+Pick one or more rooms and the primary button becomes **Clean N rooms**, calling
+`vacuum.clean_area` with the areas in the order they were tapped. The service
+takes a reorderable list, so that order is passed on rather than sorted behind
+your back.
+
+The areas have to be configured — the editor offers Home Assistant's own area
+picker for it. That is not laziness: the mapping from a map's segments onto
+areas lives inside the integration and is not readable from a card, so the
+alternative would be offering every area in the house, with "Garden" and
+"Terrace" sitting next to "Kitchen" and no way to tell which the robot can
+reach.
+
+Two things have to be true before a tap does anything: the vacuum must declare
+`CLEAN_AREA` in its supported features, and the segments must be mapped to areas
+on the vacuum entity itself — its gear icon, *"Map vacuum segments to areas"*.
+Without the mapping the service is called and the robot ignores it.
+
 ## Zooming the map
 
 A Roborock map arrives with wide transparent margins baked into the picture, so
@@ -4571,6 +4590,8 @@ something.
 | `states` | list | — | Custom status texts. First match wins; each rule takes `value`/`regex`/`above`/`below` plus `label`, `icon`, `color`. |
 | `show_map` | boolean | `true` | The live map preview. |
 | `map_height` | number | `360` | Height of the map preview in px. |
+| `show_rooms` | boolean | `true` | The room chips. |
+| `rooms` | list | — | Home Assistant area ids the vacuum can be sent to, in the order they should be offered. **Required for the block to appear** — see below. |
 | `map_zoom` | boolean | `true` | Pinch, drag and wheel zoom on the map; double-tap toggles 1×/2×. |
 | `map_max_zoom` | number | `4` | How far the pinch may go. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |

@@ -4,6 +4,7 @@ import type {
   HaActionConfig,
   HomeAssistant,
   LovelaceCard,
+  LovelaceCardEditor,
   LovelaceGridOptions,
   M3VacuumCardConfig,
   VacuumSecondaryAction,
@@ -33,6 +34,9 @@ import {
   VACUUM_PRIMARY_HEIGHT,
   VACUUM_PRIMARY_RADIUS,
   VACUUM_PRIMARY_RADIUS_PAUSED,
+  VACUUM_ROOM_HEIGHT,
+  VACUUM_ROOM_RADIUS,
+  VACUUM_ROOM_RADIUS_ACTIVE,
   VACUUM_SECONDARY_RADIUS,
   VACUUM_SECONDARY_TINT,
   VACUUM_SECONDARY_WIDTH,
@@ -114,6 +118,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _selectOptimistic: Record<string, string> = {};
   @state() private _pressedSelect?: string;
   @state() private _folded = false;
+  /** Areas picked for the next run. Cleared once it is sent. */
+  @state() private _selectedRooms: string[] = [];
   @state() private _pressedChip?: string;
   @state() private _popupOpen = false;
   @state() private _popupCardEl?: HTMLElement & PopupCardHandle;
@@ -143,8 +149,10 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   private _discoveredFor?: string;
   private _fanSettle?: number;
 
-  // getConfigElement() lands with the editor in step 5; until then Home
-  // Assistant falls back to its own YAML editor for this card.
+  public static async getConfigElement(): Promise<LovelaceCardEditor> {
+    await import("./m3-vacuum-card-editor");
+    return document.createElement("m3-vacuum-card-editor") as unknown as LovelaceCardEditor;
+  }
 
   public static getStubConfig(hass: HomeAssistant): M3VacuumCardConfig {
     const entity = Object.keys(hass.states).find((e) => e.startsWith("vacuum."));
@@ -443,7 +451,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
           ${folded
             ? nothing
             : html`
-          ${this._renderMap()}
+          ${this._renderMap()} ${this._renderRooms(unavailable)}
           ${this._renderFanSpeed(state.attributes.fan_speed_list as string[] | undefined,
             state.attributes.fan_speed as string | undefined,
             unavailable)}
@@ -532,6 +540,37 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       | number
       | undefined;
     const intent = primaryIntent(activity, supported);
+    const roomCount = this._selectedRooms.length;
+    if (roomCount > 0) {
+      const roomLabel =
+        roomCount === 1
+          ? this._t("vacuum_clean_one_room")
+          : this._t("vacuum_clean_rooms").replace("{n}", String(roomCount));
+      return html`
+        <div class="primary-row">
+          <button
+            class="primary"
+            style=${`border-radius: ${VACUUM_PRIMARY_RADIUS}px;`}
+            ?disabled=${unavailable}
+            @click=${() => this._cleanRooms()}
+          >
+            <ha-icon icon="mdi:play"></ha-icon>
+            <span>${roomLabel}</span>
+          </button>
+          <button
+            class="secondary"
+            aria-label=${this._t("vacuum_rooms_none")}
+            title=${this._t("vacuum_rooms_none")}
+            @click=${() => {
+              this._selectedRooms = [];
+            }}
+          >
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
+        </div>
+      `;
+    }
+
     const label =
       intent === "pause"
         ? this._t("vacuum_pause")
@@ -776,6 +815,73 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     if (!entityId) return undefined;
     const value = parseFloat(this.hass?.states[entityId]?.state ?? "");
     return isNaN(value) ? undefined : value;
+  }
+
+  // ---- rooms ------------------------------------------------------------------
+
+  /**
+   * The areas the vacuum can be sent to.
+   *
+   * Configured rather than discovered, and that is not laziness: the mapping
+   * from a map's segments onto Home Assistant areas lives inside the
+   * integration and is not readable from a card, so offering every area in the
+   * house would put "Garden" and "Terrace" next to "Kitchen" with no way to
+   * tell which of them the robot can reach. `vacuum.clean_area` takes area ids
+   * directly, so the list is exactly what the editor's area picker produces.
+   */
+  private _renderRooms(unavailable: boolean) {
+    if (this._config?.show_rooms === false) return nothing;
+    const rooms = this._config?.rooms;
+    if (!rooms?.length || !this.hass) return nothing;
+    const supported = this.hass.states[this._config!.entity]?.attributes?.supported_features as
+      | number
+      | undefined;
+    if (!supportsFeature(supported, "CLEAN_AREA")) return nothing;
+
+    // `hass.areas` is typed as an opaque record — the frontend's own registry
+    // entry carries more than this card needs, so only the name is read out.
+    const areas = (this.hass.areas ?? {}) as Record<string, { name?: string }>;
+    const known = rooms.filter((id) => areas[id]);
+    if (!known.length) return nothing;
+
+    return html`
+      <div class="rooms">
+        ${known.map((id) => {
+          const chosen = this._selectedRooms.includes(id);
+          return html`
+            <button
+              class="room ${chosen ? "chosen" : ""}"
+              ?disabled=${unavailable}
+              aria-pressed=${chosen ? "true" : "false"}
+              @click=${() => this._toggleRoom(id)}
+            >
+              ${areas[id].name ?? id}
+            </button>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private _toggleRoom(areaId: string): void {
+    this._selectedRooms = this._selectedRooms.includes(areaId)
+      ? this._selectedRooms.filter((id) => id !== areaId)
+      : [...this._selectedRooms, areaId];
+  }
+
+  /**
+   * Sends the picked areas. The order they were tapped in is the order that
+   * goes out — the service takes a reorderable list, so it is treated as
+   * meaningful rather than sorted behind the user's back.
+   */
+  private _cleanRooms(): void {
+    if (!this._selectedRooms.length) return;
+    this._optimistic.set(optimisticActivity("start", this._activity().activity));
+    this.hass?.callService("vacuum", "clean_area", {
+      entity_id: this._config!.entity,
+      cleaning_area_id: [...this._selectedRooms],
+    });
+    this._selectedRooms = [];
   }
 
   // ---- select-backed scales ---------------------------------------------------
@@ -1374,6 +1480,39 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       .scale-row {
         --level-accent: var(--m3v-accent);
         --level-ink: var(--m3v-ink);
+      }
+
+      .rooms {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .room {
+        height: ${unsafeCSS(VACUUM_ROOM_HEIGHT)}px;
+        border: none;
+        border-radius: ${unsafeCSS(VACUUM_ROOM_RADIUS)}px;
+        padding: 0 14px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          border-radius 0.35s ${unsafeCSS(STANDARD_EASING)},
+          background 0.25s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .room.chosen {
+        border-radius: ${unsafeCSS(VACUUM_ROOM_RADIUS_ACTIVE)}px;
+        background: var(--m3v-accent);
+        color: var(--m3v-ink);
+      }
+
+      .room:disabled {
+        cursor: default;
+        opacity: 0.4;
       }
 
       .free-buttons.dimmed {

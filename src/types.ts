@@ -804,6 +804,14 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides {
   map_max_zoom?: number;
   show_progress?: boolean;
   show_rooms?: boolean;
+  /**
+   * The areas the vacuum can be sent to, as Home Assistant area ids, in the
+   * order they should be offered. Required for the block to appear: the
+   * segment-to-area mapping lives inside the integration and is not readable
+   * from here, so there is no honest way to guess which of a home's areas the
+   * robot can actually reach.
+   */
+  rooms?: string[];
   show_fan_speed?: boolean;
   show_mop_intensity?: boolean;
   show_mop_mode?: boolean;
