@@ -2174,3 +2174,85 @@ export const VACUUM_STAT_RADIUS = 16;
 export const VACUUM_STAT_TINT = 5;
 export const VACUUM_STAT_VALUE_SIZE = 17;
 export const VACUUM_STAT_LABEL_SIZE = 9;
+
+// ---- m3-printer-card --------------------------------------------------------
+// A printer is a control surface with a long-running job on it, so the sizes
+// come from the appliance and vacuum cards rather than a new scale. The header
+// itself is the suite's shared one.
+
+export const DEFAULT_PRINTER_RADIUS = RADIUS.card;
+export const DEFAULT_PRINTER_ICON = "mdi:printer-3d";
+export const PRINTER_ICON_TINT = 16;
+
+/** Primary/secondary control row. Taller than the vacuum's, because a printer
+ *  has four buttons where the vacuum has three. */
+export const PRINTER_BUTTON_HEIGHT = 50;
+export const PRINTER_PRIMARY_RADIUS = 17;
+export const PRINTER_SECONDARY_RADIUS = 25;
+/** Both morph to this while pressed — the suite's "list row pressed" value. */
+export const PRINTER_BUTTON_RADIUS_PRESSED = 12;
+export const PRINTER_BUTTON_PRESS_MS = 400;
+export const PRINTER_SECONDARY_TINT = 8;
+export const PRINTER_STOP_TINT = 18;
+/** How far a control dims while showing a state the printer has not confirmed. */
+export const PRINTER_PENDING_OPACITY = 0.62;
+
+/** MQTT is quicker than the vacuum's polling, but a pause still takes a few
+ *  seconds to come back. Half the vacuum's window. */
+export const PRINTER_OPTIMISTIC_MS = 35_000;
+
+/** Camera preview. */
+export const PRINTER_CAMERA_RADIUS = 20;
+export const PRINTER_CAMERA_ASPECT = "16 / 10";
+export const PRINTER_CAMERA_BUTTON = 32;
+export const PRINTER_CAMERA_BUTTON_RADIUS = 16;
+export const PRINTER_CAMERA_BUTTON_RADIUS_ACTIVE = 10;
+export const PRINTER_CAMERA_BADGE_RADIUS = 9;
+/** Seconds between still refreshes. A printed layer takes longer than this. */
+export const PRINTER_CAMERA_REFRESH_S = 10;
+
+/** Temperature tiles. */
+export const PRINTER_TEMP_PADDING = 9;
+export const PRINTER_TEMP_RADIUS = 16;
+export const PRINTER_TEMP_TINT = 8;
+export const PRINTER_TEMP_VALUE_SIZE = 15;
+export const PRINTER_TEMP_LABEL_SIZE = 8;
+/** Below this much of the target, the value pulses as "still heating". */
+export const PRINTER_HEATING_DELTA = 5;
+
+/** Speed-profile pills. */
+export const PRINTER_SPEED_HEIGHT = 40;
+export const PRINTER_SPEED_RADIUS = 20;
+export const PRINTER_SPEED_RADIUS_ACTIVE = 12;
+
+/** AMS tray tiles. */
+export const PRINTER_AMS_PADDING = 9;
+export const PRINTER_AMS_RADIUS = 16;
+export const PRINTER_AMS_TINT = 5;
+export const PRINTER_AMS_SWATCH = 26;
+export const PRINTER_AMS_SWATCH_RADIUS = 10;
+export const PRINTER_AMS_BAR_HEIGHT = 3;
+/** Below this percentage the remaining-filament bar turns amber. */
+export const PRINTER_FILAMENT_WARN = 40;
+
+/** Details block. */
+export const PRINTER_DETAILS_HEIGHT = 42;
+export const PRINTER_DETAILS_RADIUS = 19;
+export const PRINTER_DETAILS_RADIUS_OPEN = 13;
+export const PRINTER_DETAIL_CHIP_HEIGHT = 28;
+export const PRINTER_DETAIL_CHIP_RADIUS = 14;
+export const PRINTER_ACCESSORY_HEIGHT = 46;
+export const PRINTER_ACCESSORY_RADIUS = 16;
+export const PRINTER_ACCESSORY_ICON = 30;
+export const PRINTER_ACCESSORY_ICON_RADIUS = 14;
+export const PRINTER_ACCESSORY_ICON_RADIUS_ON = 9;
+
+/** Below this the temperatures stack and the speed pills lose their labels. */
+export const PRINTER_NARROW_PX = 340;
+
+/** Progress wave, matching the appliance and vacuum bars. */
+export const PRINTER_WAVE_STROKE = 6;
+export const PRINTER_WAVE_AMPLITUDE = 2.4;
+export const PRINTER_WAVE_WAVELENGTH = 20;
+export const PRINTER_WAVE_GAP = 8;
+export const PRINTER_WAVE_SVG_HEIGHT = 16;

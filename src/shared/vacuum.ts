@@ -1,5 +1,6 @@
 import type { HomeAssistant } from "../types";
 import { PALETTE } from "./tokens";
+import { OptimisticState } from "./optimistic-state";
 
 // Everything the two vacuum cards share: what a vacuum's state *means*, which
 // of a device's entities belong to which block, and the optimistic-state
@@ -194,65 +195,42 @@ export function optimisticActivity(
 }
 
 /**
- * Holds a state the card asked for until the real one catches up.
+ * The vacuum's own optimistic holder, wrapping the generic one.
  *
- * Two ways out, and both are needed. The expected case is that a poll brings
- * the state we asked for, and the guess is dropped because it has become the
- * truth. The other is that it never arrives — the vacuum refused, the dock was
- * blocked, the command was lost — and then the guess has to expire on its own,
- * or the card would lie until the next tap.
+ * Composition rather than inheritance, because the card speaks of activities
+ * and the generic class speaks of values — and a subclass that changes the
+ * shape of an inherited method is a lie the compiler is right to reject.
+ *
+ * An error or a disconnect always wins over a standing guess: those are the
+ * two states a user must not be kept from seeing for the sake of a smooth
+ * animation.
  */
 export class OptimisticActivity {
-  private _guess?: VacuumActivity;
-  private _since = 0;
-  private _timer?: number;
+  private readonly _inner: OptimisticState<VacuumActivity>;
 
-  /** Long enough for two polls at the integration's 30-second cadence. */
-  public constructor(
-    private readonly _ttlMs = 70_000,
-    private readonly _onExpire?: () => void,
-  ) {}
+  public constructor(ttlMs = 70_000, onExpire?: () => void) {
+    this._inner = new OptimisticState<VacuumActivity>({
+      ttlMs,
+      onExpire,
+      overriding: ["error", "unavailable"],
+    });
+  }
 
   public set(activity: VacuumActivity): void {
-    this._guess = activity;
-    this._since = Date.now();
-    if (this._timer) clearTimeout(this._timer);
-    this._timer = setTimeout(() => {
-      this._guess = undefined;
-      this._timer = undefined;
-      this._onExpire?.();
-    }, this._ttlMs) as unknown as number;
+    this._inner.set(activity);
   }
 
   public clear(): void {
-    this._guess = undefined;
-    if (this._timer) clearTimeout(this._timer);
-    this._timer = undefined;
+    this._inner.clear();
   }
 
-  /**
-   * The state to paint. Reporting whether the guess is still standing lets the
-   * card dim the button for exactly as long as it is showing something it has
-   * not yet been told is true.
-   */
   public resolve(actual: VacuumActivity): { activity: VacuumActivity; pending: boolean } {
-    if (!this._guess) return { activity: actual, pending: false };
-    if (actual === this._guess) {
-      // Confirmed — stop guessing, and stop dimming.
-      this.clear();
-      return { activity: actual, pending: false };
-    }
-    // An error always wins over a guess: it is the one state the user must not
-    // be kept from seeing for the sake of a smooth animation.
-    if (actual === "error" || actual === "unavailable") {
-      this.clear();
-      return { activity: actual, pending: false };
-    }
-    return { activity: this._guess, pending: true };
+    const { value, pending } = this._inner.resolve(actual);
+    return { activity: value, pending };
   }
 
   public get pendingSince(): number {
-    return this._guess ? this._since : 0;
+    return this._inner.pendingSince;
   }
 }
 

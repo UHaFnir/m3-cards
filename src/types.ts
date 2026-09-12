@@ -975,6 +975,102 @@ export type VacuumBlock = "map" | "rooms" | "fan_speed" | "mop" | "buttons" | "c
 
 export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
 
+/** Raw status value → one of the six printer states. */
+export type PrinterStateMap = Record<string, import("./shared/printer").PrinterState>;
+
+export interface PrinterAccessoryConfig {
+  entity: string;
+  name?: string;
+  icon?: string;
+  color?: string;
+  /** Shown on the right of the row instead of "On" when it reads watts. */
+  power_entity?: string;
+}
+
+export interface PrinterAmsSlotConfig {
+  type_entity?: string;
+  color_entity?: string;
+  remaining_entity?: string;
+}
+
+export type PrinterSecondaryAction = "stop" | "files" | "filament" | "preheat";
+
+export interface M3PrinterCardConfig {
+  /**
+   * The entity whose state drives the layout — a status or stage sensor. Any
+   * domain is accepted, because integrations disagree about which one holds
+   * it, and `state_map` is what turns its value into something the card
+   * understands.
+   */
+  entity: string;
+  type: string;
+  name?: string;
+  icon?: string;
+
+  /** Raw status values onto the six states. Wins over the built-in table. */
+  state_map?: PrinterStateMap;
+
+  camera_entity?: string;
+  progress_entity?: string;
+  remaining_entity?: string;
+  layer_entity?: string;
+  total_layers_entity?: string;
+  job_name_entity?: string;
+  stage_entity?: string;
+  nozzle_temp_entity?: string;
+  nozzle_target_entity?: string;
+  bed_temp_entity?: string;
+  bed_target_entity?: string;
+  chamber_temp_entity?: string;
+  speed_entity?: string;
+  start_time_entity?: string;
+  end_time_entity?: string;
+  power_entity?: string;
+  online_entity?: string;
+  error_entity?: string;
+  light_entity?: string;
+
+  ams_slots?: PrinterAmsSlotConfig[];
+  accessories?: PrinterAccessoryConfig[];
+
+  show_camera?: boolean;
+  camera_refresh?: number;
+  camera_live?: boolean;
+  show_progress?: boolean;
+  show_temps?: boolean;
+  show_speed?: boolean;
+  show_ams?: boolean;
+  show_details?: boolean;
+  details_default_open?: boolean;
+  /** Drops a `.3mf`/`.gcode` ending from the job name. */
+  strip_extension?: boolean;
+  filament_warn?: number;
+  /** A stop is irreversible on a printer; asking twice is the default. */
+  confirm_stop?: boolean;
+  secondary_actions?: PrinterSecondaryAction[];
+  optimistic_timeout?: number;
+
+  pause_action?: HaActionConfig;
+  resume_action?: HaActionConfig;
+  stop_action?: HaActionConfig;
+  start_action?: HaActionConfig;
+  preheat_action?: HaActionConfig;
+  files_action?: HaActionConfig;
+  filament_action?: HaActionConfig;
+
+  tap_action?: HaActionConfig;
+  accent_color?: string;
+  accent_opacity?: number;
+  text_color?: string;
+  secondary_text_color?: string;
+  card_background?: string;
+  glass_background?: boolean;
+  animation?: "auto" | "on" | "off";
+  radius?: number;
+  corners?: CornerRadiusConfig;
+  card_version?: string;
+}
+
 export interface M3WeatherCardConfig {
   type: string;
   entity: string;
