@@ -984,8 +984,12 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       }
 
       /* Grey, not red: a printer at the wall socket is a normal state, not a
-         fault, and painting it as one trains people to ignore red. */
-      ha-card.offline .card-inner {
+         fault, and painting it as one trains people to ignore red.
+         The details block is exempt, and that is the point of the rule: the
+         socket switch lives in there and it is the only control that can
+         bring the printer back. Dimming it would make the one thing that
+         still works look like the things that do not. */
+      ha-card.offline .card-inner > *:not(.details) {
         opacity: 0.4;
       }
 
