@@ -779,6 +779,15 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigB
    * keys as the room and heading cards, and the same storage.
    */
   collapsible?: boolean;
+  /**
+   * Which blocks the fold actually hides. Left out, it hides all of them,
+   * which is what `collapsible` did before this existed — so adding the key
+   * narrows the fold rather than changing what a card without it does.
+   *
+   * Useful for keeping one thing in view that the fold would otherwise take
+   * with it: the suction scale on a card whose map folds away, say.
+   */
+  collapse_blocks?: VacuumBlock[];
   default_collapsed?: boolean;
   collapse_state_entity?: string;
   collapse_memory?: CollapseMemory;
@@ -947,6 +956,9 @@ export interface VacuumPopupConfig {
   /** `[[entity_id]]` and `[[name]]` in it resolve to this card's. */
   content: Record<string, unknown>;
 }
+
+/** The foldable parts of the control card, below the primary buttons. */
+export type VacuumBlock = "map" | "rooms" | "fan_speed" | "mop" | "buttons" | "chips";
 
 export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
 

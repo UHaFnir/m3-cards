@@ -7,6 +7,7 @@ import type {
   LovelaceCardEditor,
   LovelaceGridOptions,
   M3VacuumCardConfig,
+  VacuumBlock,
   VacuumSecondaryAction,
 } from "./types";
 import {
@@ -428,8 +429,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         : activityColor(activity);
     const radius = `${this._config.radius ?? DEFAULT_VACUUM_RADIUS}px`;
     // The state, the battery and Start/Pause never fold: they are what the
-    // card is for at a glance. Everything below them does.
+    // card is for at a glance. Of what is below them, the fold hides whatever
+    // `collapse_blocks` names — and everything, when it names nothing.
     const folded = !!this._config.collapsible && this._folded;
+    const foldable = this._config.collapse_blocks;
+    const hidden = (block: VacuumBlock): boolean =>
+      folded && (!foldable || foldable.includes(block));
 
     return html`
       <ha-card
@@ -449,30 +454,37 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         >
           ${this._renderHeader(activity, pending)}
           ${this._renderPrimaryRow(activity, pending)}
-          ${folded
+          ${hidden("map") ? nothing : this._renderMap()}
+          ${hidden("rooms") ? nothing : this._renderRooms(unavailable)}
+          ${hidden("fan_speed")
+            ? nothing
+            : this._renderFanSpeed(
+                state.attributes.fan_speed_list as string[] | undefined,
+                state.attributes.fan_speed as string | undefined,
+                unavailable,
+              )}
+          ${hidden("mop")
             ? nothing
             : html`
-          ${this._renderMap()} ${this._renderRooms(unavailable)}
-          ${this._renderFanSpeed(state.attributes.fan_speed_list as string[] | undefined,
-            state.attributes.fan_speed as string | undefined,
-            unavailable)}
-          ${this._renderSelectScale(
-            "mop_intensity_entity",
-            "mopIntensity",
-            "vacuum_mop_intensity",
-            "vacuum_mop_",
-            this._config.show_mop_intensity,
-            unavailable,
-          )}
-          ${this._renderSelectScale(
-            "mop_mode_entity",
-            "mopMode",
-            "vacuum_mop_mode",
-            "vacuum_route_",
-            this._config.show_mop_mode ?? false,
-            unavailable,
-          )}
-          ${this._renderButtons(unavailable)} ${this._renderChips()}`}
+                ${this._renderSelectScale(
+                  "mop_intensity_entity",
+                  "mopIntensity",
+                  "vacuum_mop_intensity",
+                  "vacuum_mop_",
+                  this._config.show_mop_intensity,
+                  unavailable,
+                )}
+                ${this._renderSelectScale(
+                  "mop_mode_entity",
+                  "mopMode",
+                  "vacuum_mop_mode",
+                  "vacuum_route_",
+                  this._config.show_mop_mode ?? false,
+                  unavailable,
+                )}
+              `}
+          ${hidden("buttons") ? nothing : this._renderButtons(unavailable)}
+          ${hidden("chips") ? nothing : this._renderChips()}
           ${this._config.card_version
             ? html`<div class="version">${CARD_VERSION}</div>`
             : nothing}

@@ -4511,6 +4511,23 @@ the buttons and the chips. What stays is the line you actually glance at — the
 state, the battery and Start/Pause — which is the split worth making on a
 dashboard where the vacuum is not the main event.
 
+`collapse_blocks` narrows what disappears. Folding the map away while the
+suction scale stays put is a different card from folding everything, and both
+are reasonable:
+
+```yaml
+type: custom:m3-vacuum-card
+entity: vacuum.dobby
+collapsible: true
+default_collapsed: true
+collapse_blocks: [map, mop, buttons]
+```
+
+That leaves the state, the battery, Start/Pause, the suction scale and the
+status chips visible at all times, and puts the map and the mop controls behind
+the chevron. Leaving the key out folds everything, which is what `collapsible`
+alone has always done.
+
 The fold is remembered the same way the room and heading cards remember theirs:
 per device by default, per session with `collapse_memory: session`, or in an
 `input_boolean` via `collapse_state_entity`, which survives a different browser
@@ -4595,7 +4612,8 @@ something.
 | `entity` | string | — | **Required.** The `vacuum` entity. |
 | `name` | string | entity name | Header title. |
 | `icon` | string | follows the state | Overrides the header icon. |
-| `collapsible` | boolean | `false` | Folds everything below the primary buttons. State, battery and Start/Pause stay in view. |
+| `collapsible` | boolean | `false` | Folds the blocks below the primary buttons. State, battery and Start/Pause stay in view. |
+| `collapse_blocks` | list | all | Which blocks the fold hides: `map`, `rooms`, `fan_speed`, `mop`, `buttons`, `chips`. Left out, it hides all of them. |
 | `default_collapsed` | boolean | `false` | Whether it starts folded. |
 | `collapse_state_entity` | string | — | An `input_boolean` holding the fold, so it survives a different browser and an automation can fold it. |
 | `collapse_memory` | `device` \| `session` | `device` | Where the fold is remembered without a helper entity. |

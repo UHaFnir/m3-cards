@@ -208,6 +208,23 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
         selector: { number: { min: 5000, max: 300000, step: 5000, mode: "box", unit_of_measurement: "ms" } },
       },
       { name: "collapsible", selector: { boolean: {} } },
+      {
+        name: "collapse_blocks",
+        selector: {
+          select: {
+            multiple: true,
+            mode: "list",
+            options: [
+              { value: "map", label: this._t("editor_vacuum_show_map") },
+              { value: "rooms", label: this._t("vacuum_rooms") },
+              { value: "fan_speed", label: this._t("vacuum_fan_speed") },
+              { value: "mop", label: this._t("vacuum_mop_intensity") },
+              { value: "buttons", label: this._t("editor_vacuum_buttons") },
+              { value: "chips", label: this._t("editor_vacuum_show_chips") },
+            ],
+          },
+        },
+      },
       { name: "default_collapsed", selector: { boolean: {} } },
       {
         name: "collapse_memory",
@@ -255,6 +272,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       secondary_actions: "editor_vacuum_secondary",
       optimistic_timeout: "editor_vacuum_optimistic",
       collapsible: "editor_vacuum_collapsible",
+      collapse_blocks: "editor_vacuum_collapse_blocks",
       default_collapsed: "editor_vacuum_default_collapsed",
       collapse_memory: "editor_vacuum_collapse_memory",
       notify_service: "editor_notify_service",
@@ -279,6 +297,11 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       if (next[key] === "") delete next[key];
     }
     if (Array.isArray(next.rooms) && next.rooms.length === 0) delete next.rooms;
+    // An empty selection means "fold everything", which is the absent key —
+    // storing [] would silently make the fold hide nothing at all.
+    if (Array.isArray(next.collapse_blocks) && next.collapse_blocks.length === 0) {
+      delete next.collapse_blocks;
+    }
     this._emit(next as unknown as M3VacuumCardConfig);
   }
 
@@ -363,6 +386,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       secondary_actions: cfg.secondary_actions ?? ["return_to_base", "locate"],
       optimistic_timeout: cfg.optimistic_timeout ?? 70000,
       collapsible: cfg.collapsible ?? false,
+      collapse_blocks: cfg.collapse_blocks ?? [],
       default_collapsed: cfg.default_collapsed ?? false,
       collapse_memory: cfg.collapse_memory ?? "device",
       animation: cfg.animation ?? "auto",
@@ -426,6 +450,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
               @value-changed=${this._valueChanged}
             ></ha-form>
             <div class="hint">${this._t("editor_vacuum_optimistic_hint")}</div>
+            <div class="hint">${this._t("editor_vacuum_collapse_blocks_hint")}</div>
           </div>
         </ha-expansion-panel>
 
