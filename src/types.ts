@@ -765,7 +765,7 @@ export interface VacuumEntityOverrides {
   volume_entity?: string;
 }
 
-export interface M3VacuumCardConfig extends VacuumEntityOverrides {
+export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigBase {
   type: string;
   /** The `vacuum` entity. Everything else is optional. */
   entity: string;
@@ -872,7 +872,7 @@ export interface VacuumConsumableConfig {
   max_hours?: number;
 }
 
-export interface M3VacuumMaintenanceCardConfig {
+export interface M3VacuumMaintenanceCardConfig extends NotifyConfigBase {
   type: string;
   /** The vacuum. Everything else is found on its device and its dock. */
   entity: string;

@@ -12,13 +12,30 @@ import {
   renderAppearanceSection,
   type AppearanceState,
 } from "./shared/appearance-editor";
-import { supportsFeature } from "./shared/vacuum";
+import { discoverVacuum, supportsFeature } from "./shared/vacuum";
+import {
+  notifyActions,
+  notifyMessageSchema,
+  notifyServiceSchema,
+  notifyStyles,
+  notifySampleEntity,
+  notifyTitleSchema,
+  notifyTokenHint,
+  renderNotifyControls,
+  resolveAutomationId,
+  saveNotifyAutomation,
+  setAutomationEnabled,
+  triggerStatePrelude,
+} from "./shared/notify-editor";
 
 @customElement("m3-vacuum-card-editor")
 export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @state() private _config?: M3VacuumCardConfig;
+  @state() private _notifyBusy = false;
+  @state() private _notifyStatus: "idle" | "success" | "error" = "idle";
+  @state() private _notifyDetail = "";
   @state() private _appearance: AppearanceState = {
     showCustomRadius: false,
     showCorners: false,
@@ -41,6 +58,99 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
   private _emit(config: M3VacuumCardConfig): void {
     this._config = config;
     fireEvent(this, "config-changed", { config });
+  }
+
+  private _notifySchema(): SchemaEntry[] {
+    return [notifyServiceSchema(this.hass), notifyTitleSchema(), notifyMessageSchema()];
+  }
+
+  private async _toggleNotify(enabled: boolean): Promise<void> {
+    if (!this._config || !this.hass) return;
+    this._emit({ ...this._config, notify_enabled: enabled });
+    if (enabled) {
+      await this._setupNotify();
+      return;
+    }
+    const id = this._config.notify_automation_id;
+    if (id) await setAutomationEnabled(this.hass, id, false);
+  }
+
+  /**
+   * Builds the automation that reports an error from the vacuum or its dock.
+   *
+   * Triggered on the error sensors rather than on the vacuum's own `error`
+   * state, because those carry the reason — "water_empty" rather than just
+   * "something is wrong" — and because the dock's errors never reach the
+   * vacuum entity at all.
+   *
+   * `not_to` on the healthy values means it fires when an error appears and
+   * stays quiet while the same one stands, instead of once per poll.
+   */
+  private async _setupNotify(): Promise<void> {
+    const cfg = this._config;
+    if (!this.hass || !cfg) return;
+    const targets = cfg.notify_service ?? [];
+    if (targets.length === 0) {
+      this._notifyStatus = "error";
+      this._notifyDetail = this._t("editor_vacuum_notify_missing");
+      return;
+    }
+    this._notifyBusy = true;
+    this._notifyStatus = "idle";
+    this._notifyDetail = "";
+    try {
+      const found = discoverVacuum(this.hass, cfg.entity);
+      const ids = [found.vacuumError, found.dockError].filter(Boolean) as string[];
+      if (!ids.length) throw new Error("no error sensors on this vacuum");
+
+      const healthy = ["ok", "none", "unknown", "unavailable"];
+      const cardName =
+        cfg.name || this.hass.states[cfg.entity]?.attributes.friendly_name || cfg.entity;
+      const automationId = resolveAutomationId("vacuum_error", cfg.notify_automation_id);
+
+      await saveNotifyAutomation(this.hass, {
+        id: automationId,
+        alias: `${cardName}: ${this._t("editor_vacuum_notify_error_alias")}`,
+        description: this._t("editor_vacuum_notify_error_description"),
+        mode: "single",
+        triggers: [{ trigger: "state", entity_id: ids, not_to: healthy }],
+        // A restart replays states; without this the first tick after one
+        // would announce every error the machine was already in.
+        conditions: [
+          {
+            condition: "template",
+            value_template:
+              "{{ trigger.from_state is not none and trigger.from_state.state != trigger.to_state.state }}",
+          },
+        ],
+        actions: notifyActions(
+          targets,
+          cardName,
+          this._t("editor_vacuum_notify_error_body")
+            .replace("{geraet}", "{{ s.name }}")
+            .replace("{fehler}", "{{ s.state }}"),
+          {
+            title: cfg.notify_title,
+            message: cfg.notify_message,
+            // A sensor already in an error state makes the better sample for
+            // a hand-run than one that is fine.
+            prelude: triggerStatePrelude(
+              notifySampleEntity(this.hass, ids, (st) => !healthy.includes(st.state)),
+            ),
+            tokens: { geraet: "{{ s.name }}", fehler: "{{ s.state }}" },
+          },
+        ),
+      });
+
+      this._emit({ ...cfg, notify_automation_id: automationId, notify_enabled: true });
+      await setAutomationEnabled(this.hass, automationId, true);
+      this._notifyStatus = "success";
+    } catch (e) {
+      this._notifyStatus = "error";
+      this._notifyDetail = String(e).slice(0, 160);
+    } finally {
+      this._notifyBusy = false;
+    }
   }
 
   private _deviceSchema(): SchemaEntry[] {
@@ -147,6 +257,9 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       collapsible: "editor_vacuum_collapsible",
       default_collapsed: "editor_vacuum_default_collapsed",
       collapse_memory: "editor_vacuum_collapse_memory",
+      notify_service: "editor_notify_service",
+      notify_title: "editor_notify_title",
+      notify_message: "editor_notify_message",
       animation: "editor_progress_animation",
       glass_background: "editor_glass_background",
       ...radiusLabelMap,
@@ -241,6 +354,11 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       show_station_chips: cfg.show_station_chips ?? true,
       max_chips: cfg.max_chips ?? 4,
     };
+    const notifyData = {
+      notify_service: cfg.notify_service ?? [],
+      notify_title: cfg.notify_title ?? "",
+      notify_message: cfg.notify_message ?? "",
+    };
     const behaviorData = {
       secondary_actions: cfg.secondary_actions ?? ["return_to_base", "locate"],
       optimistic_timeout: cfg.optimistic_timeout ?? 70000,
@@ -311,6 +429,32 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
           </div>
         </ha-expansion-panel>
 
+        <ha-expansion-panel outlined .header=${this._t("editor_vacuum_notify")}>
+          <ha-icon slot="leading-icon" icon="mdi:bell-outline"></ha-icon>
+          <div class="panel-content">
+            ${renderNotifyControls({
+              hass: this.hass,
+              language: this._language,
+              enabled: cfg.notify_enabled ?? false,
+              automationId: cfg.notify_automation_id,
+              busy: this._notifyBusy,
+              status: this._notifyStatus,
+              detail: this._notifyDetail,
+              onToggle: (enabled) => void this._toggleNotify(enabled),
+              onSetup: () => void this._setupNotify(),
+            })}
+            <ha-form
+              .hass=${this.hass}
+              .data=${notifyData}
+              .schema=${this._notifySchema()}
+              .computeLabel=${this._computeLabel}
+              @value-changed=${this._valueChanged}
+            ></ha-form>
+            <div class="hint">${this._t("editor_vacuum_notify_error_hint")}</div>
+            <div class="hint">${notifyTokenHint(this._language, ["geraet", "fehler"])}</div>
+          </div>
+        </ha-expansion-panel>
+
         <ha-expansion-panel outlined .header=${this._t("editor_progress_colors")}>
           <ha-icon slot="leading-icon" icon="mdi:palette-outline"></ha-icon>
           <div class="panel-content">
@@ -348,7 +492,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
     `;
   }
 
-  static styles = editorStyles;
+  static styles = [editorStyles, notifyStyles];
 }
 
 declare global {

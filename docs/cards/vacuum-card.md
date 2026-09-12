@@ -125,6 +125,18 @@ states:
 A rule's label wins over the status sensor, which is what makes it useful as an
 override rather than only as a fallback.
 
+## Telling you when it goes wrong
+
+The editor can build an automation that notifies on an error from the vacuum
+**or its dock**. It watches the two error sensors rather than the vacuum's own
+`error` state, for two reasons: those carry the reason — `water_empty` rather
+than just "something is wrong" — and the dock's errors never reach the vacuum
+entity at all.
+
+It fires when an error appears and stays quiet while the same one stands, and a
+restart does not replay errors the machine was already in. `{geraet}` and
+`{fehler}` are available in the custom text.
+
 ## Three things worth knowing about Roborock
 
 **It polls every 30 seconds and pushes nothing.** A tap on Start therefore
@@ -173,6 +185,7 @@ something.
 | `secondary_actions` | list | `[return_to_base, locate]` | The two buttons beside the primary one: `return_to_base`, `locate`, `stop`. |
 | `optimistic_timeout` | number | `70000` | How long, in milliseconds, a tapped state is shown before the card stops waiting for confirmation. |
 | `status_entity` | string | discovered | The status sensor whose text the header shows. |
+| `notify_enabled`, `notify_service`, `notify_title`, `notify_message` | — | — | The error notification above. Off until switched on. |
 | `accent_color` | string | the state colour | Pins the card to one colour instead of letting the state pick it. |
 | `text_color`, `secondary_text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
 

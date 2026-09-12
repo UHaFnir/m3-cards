@@ -11,6 +11,21 @@ import { localize, type TranslationKey } from "./localize";
 import { colorRow, editorStyles, fireEvent, type SchemaEntry } from "./shared/editor-helpers";
 import { radiusLabelMap } from "./shared/radius-editor";
 import {
+  notifyActions,
+  notifyMessageSchema,
+  notifyServiceSchema,
+  notifyStyles,
+  notifyTimeSchema,
+  notifyTitleSchema,
+  notifyTokenHint,
+  renderNotifyControls,
+  resolveAutomationId,
+  saveNotifyAutomation,
+  setAutomationEnabled,
+} from "./shared/notify-editor";
+import { discoverVacuum } from "./shared/vacuum";
+import { VACUUM_PART_MAX_HOURS } from "./const";
+import {
   initAppearanceState,
   radiusPresetPatch,
   cornerPresetPatch,
@@ -23,6 +38,9 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @state() private _config?: M3VacuumMaintenanceCardConfig;
+  @state() private _notifyBusy = false;
+  @state() private _notifyStatus: "idle" | "success" | "error" = "idle";
+  @state() private _notifyDetail = "";
   @state() private _appearance: AppearanceState = {
     showCustomRadius: false,
     showCorners: false,
@@ -45,6 +63,118 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
   private _emit(config: M3VacuumMaintenanceCardConfig): void {
     this._config = config;
     fireEvent(this, "config-changed", { config });
+  }
+
+  private _notifySchema(): SchemaEntry[] {
+    return [
+      notifyServiceSchema(this.hass),
+      notifyTimeSchema(),
+      notifyTitleSchema(),
+      notifyMessageSchema(),
+    ];
+  }
+
+  /**
+   * Turning it off pauses the automation rather than deleting it, so the
+   * wording and the target survive a toggle round-trip.
+   */
+  private async _toggleNotify(enabled: boolean): Promise<void> {
+    if (!this._config || !this.hass) return;
+    this._emit({ ...this._config, notify_enabled: enabled });
+    if (enabled) {
+      await this._setupNotify();
+      return;
+    }
+    const id = this._config.notify_automation_id;
+    if (id) await setAutomationEnabled(this.hass, id, false);
+  }
+
+  /**
+   * Builds the automation that reports parts coming due.
+   *
+   * A daily digest rather than a trigger per sensor, and for a concrete
+   * reason: the sensors report hours left against six different service
+   * lives, so "below 25 %" is six different numbers. Working that out once a
+   * day in one template is both simpler and quieter than six numeric_state
+   * triggers that would each fire on their own.
+   */
+  private async _setupNotify(): Promise<void> {
+    const cfg = this._config;
+    if (!this.hass || !cfg) return;
+    const targets = cfg.notify_service ?? [];
+    if (targets.length === 0) {
+      this._notifyStatus = "error";
+      this._notifyDetail = this._t("editor_vacuum_notify_missing");
+      return;
+    }
+    this._notifyBusy = true;
+    this._notifyStatus = "idle";
+    this._notifyDetail = "";
+    try {
+      const found = discoverVacuum(this.hass, cfg.entity);
+      const parts = Object.entries(found.consumables);
+      if (!parts.length) throw new Error("no consumable sensors");
+
+      const warn = (cfg.warn_below ?? VACUUM_PART_WARN_BELOW) / 100;
+      // entity_id -> the hours that count as "due" for that part.
+      const limits: Record<string, number> = {};
+      for (const [key, entityId] of parts) {
+        const max = VACUUM_PART_MAX_HOURS[key];
+        if (max) limits[entityId] = Math.round(max * warn);
+      }
+      const ids = Object.keys(limits);
+      if (!ids.length) throw new Error("no part has a known service life");
+
+      const cardName = cfg.name || this._t("vacuum_maint_title");
+      const automationId = resolveAutomationId(
+        "vacuum_parts",
+        cfg.notify_automation_id,
+      );
+
+      // Collect the names of every part under its own limit. `float(1e9)`
+      // makes an unavailable sensor read as "plenty left" rather than as
+      // overdue, so a restart does not produce a false alarm.
+      const listTemplate =
+        `{% set limits = ${JSON.stringify(limits)} %}` +
+        `{% set ns = namespace(items=[]) %}` +
+        `{% for e, limit in limits.items() %}{% set s = states[e] %}` +
+        `{% if s is not none and s.state not in ['unknown', 'unavailable'] %}` +
+        `{% if s.state | float(1e9) <= limit %}` +
+        `{% set ns.items = ns.items + [s.name] %}` +
+        `{% endif %}{% endif %}{% endfor %}` +
+        `{{ ns.items }}`;
+
+      await saveNotifyAutomation(this.hass, {
+        id: automationId,
+        alias: `${cardName}: ${this._t("editor_vacuum_notify_parts_alias")}`,
+        description: this._t("editor_vacuum_notify_parts_description"),
+        mode: "single",
+        variables: { due: listTemplate },
+        triggers: [{ trigger: "time", at: cfg.notify_time || "09:00:00" }],
+        // Nothing due means nothing said. Without this the automation would
+        // send "Due: []" every morning, which is how people mute a channel.
+        conditions: [{ condition: "template", value_template: "{{ due | count > 0 }}" }],
+        actions: notifyActions(
+          targets,
+          cardName,
+          this._t("editor_vacuum_notify_parts_body").replace("{teile}", "{{ due | join(', ') }}"),
+          {
+            title: cfg.notify_title,
+            message: cfg.notify_message,
+            tokens: { teile: "{{ due | join(', ') }}", anzahl: "{{ due | count }}" },
+          },
+        ),
+      });
+
+      this._emit({ ...cfg, notify_automation_id: automationId, notify_enabled: true });
+      await setAutomationEnabled(this.hass, automationId, true);
+      this._notifyStatus = "success";
+    } catch (e) {
+      this._notifyStatus = "error";
+      this._notifyDetail = String(e).slice(0, 160);
+    } finally {
+      this._notifyBusy = false;
+    }
   }
 
   private _deviceSchema(): SchemaEntry[] {
@@ -84,6 +214,10 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       show_stats: "editor_vacuum_show_stats",
       show_settings: "editor_vacuum_show_settings",
       show_reset: "editor_vacuum_show_reset",
+      notify_service: "editor_notify_service",
+      notify_time: "editor_vacuum_notify_time",
+      notify_title: "editor_notify_title",
+      notify_message: "editor_notify_message",
       collapsible: "editor_vacuum_collapsible",
       default_collapsed: "editor_vacuum_default_collapsed",
       glass_background: "editor_glass_background",
@@ -163,6 +297,12 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       warn_below: cfg.warn_below ?? VACUUM_PART_WARN_BELOW,
       alert_below: cfg.alert_below ?? VACUUM_PART_ALERT_BELOW,
     };
+    const notifyData = {
+      notify_service: cfg.notify_service ?? [],
+      notify_time: cfg.notify_time ?? "09:00:00",
+      notify_title: cfg.notify_title ?? "",
+      notify_message: cfg.notify_message ?? "",
+    };
     const displayData = {
       show_station: cfg.show_station ?? true,
       show_stats: cfg.show_stats ?? true,
@@ -215,6 +355,32 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
           </div>
         </ha-expansion-panel>
 
+        <ha-expansion-panel outlined .header=${this._t("editor_vacuum_notify")}>
+          <ha-icon slot="leading-icon" icon="mdi:bell-outline"></ha-icon>
+          <div class="panel-content">
+            ${renderNotifyControls({
+              hass: this.hass,
+              language: this._language,
+              enabled: cfg.notify_enabled ?? false,
+              automationId: cfg.notify_automation_id,
+              busy: this._notifyBusy,
+              status: this._notifyStatus,
+              detail: this._notifyDetail,
+              onToggle: (enabled) => void this._toggleNotify(enabled),
+              onSetup: () => void this._setupNotify(),
+            })}
+            <ha-form
+              .hass=${this.hass}
+              .data=${notifyData}
+              .schema=${this._notifySchema()}
+              .computeLabel=${this._computeLabel}
+              @value-changed=${this._valueChanged}
+            ></ha-form>
+            <div class="hint">${this._t("editor_vacuum_notify_parts_hint")}</div>
+            <div class="hint">${notifyTokenHint(this._language, ["teile", "anzahl"])}</div>
+          </div>
+        </ha-expansion-panel>
+
         <ha-expansion-panel outlined .header=${this._t("editor_progress_colors")}>
           <ha-icon slot="leading-icon" icon="mdi:palette-outline"></ha-icon>
           <div class="panel-content">
@@ -247,7 +413,7 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
     `;
   }
 
-  static styles = editorStyles;
+  static styles = [editorStyles, notifyStyles];
 }
 
 declare global {

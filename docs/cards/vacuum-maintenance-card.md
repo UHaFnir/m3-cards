@@ -58,6 +58,22 @@ card cannot press what does not exist, so `show_reset` is off by default and the
 reset stays unavailable until the button is enabled under *Settings → Devices →
 Entities*.
 
+## Telling you when something is due
+
+The editor can build a Home Assistant automation that checks once a day and
+reports the parts that have fallen below the warning threshold. It is a daily
+digest rather than a trigger per sensor for a concrete reason: the sensors
+report hours left against six different service lives, so "below 25 %" is six
+different numbers — working that out once a day in one template is both simpler
+and quieter than six triggers that each fire on their own.
+
+Nothing due means nothing sent. Without that condition it would report an empty
+list every morning, which is how a notification channel gets muted.
+
+Turning the switch off pauses the automation rather than deleting it, so the
+target and the wording survive. `{teile}` and `{anzahl}` are available in the
+custom text.
+
 ## Options
 
 | Option | Type | Default | Description |
@@ -73,6 +89,7 @@ Entities*.
 | `show_settings` | boolean | `false` | Child lock, do-not-disturb and volume. |
 | `show_reset` | boolean | `false` | Long-press a part to reset its counter. See above. |
 | `collapsible`, `default_collapsed`, `collapse_state_entity`, `collapse_memory` | — | — | Folds everything below the header, as on the room and heading cards. |
+| `notify_enabled`, `notify_service`, `notify_time`, `notify_title`, `notify_message` | — | — | The notification above. Off until switched on. |
 | `accent_color`, `text_color`, `secondary_text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
 
 Only blocks whose entities exist are drawn, so a vacuum without a dock shows
