@@ -99,8 +99,14 @@ function renderChipButton(
   const bg = tintOn(host, color, undefined, active ? 20 : 8);
   const ink = foregroundOn(color, bg, 3, host);
   const name = button.name || entity?.attributes.friendly_name || button.entity || "";
+  // A button, a scene or a script has no state worth reading — it is
+  // "unknown" until pressed and a timestamp after, and neither is news. So
+  // those default to hiding it, while `show_state: true` still forces it for
+  // anyone who wants the timestamp.
+  const stateless = STATELESS_DOMAINS.has(domain);
+  const showState = button.show_state ?? !stateless;
   const stateText =
-    button.show_state !== false && entity && !unavailable
+    showState && entity && !unavailable
       ? (hass.formatEntityState?.(entity) ?? entity.state)
       : "";
   const cssVars = `--m3cb-bg: ${bg}; --m3cb-ink: ${ink};`;

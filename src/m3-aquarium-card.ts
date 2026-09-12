@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
+import { LitElement, html, css, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
@@ -36,6 +36,8 @@ import {
   AQUARIUM_SCHEDULE_TRACK_HEIGHT,
   AQUARIUM_SCHEDULE_TRACK_RADIUS,
   AQUARIUM_SCHEDULE_MARKER_WIDTH,
+  AQUARIUM_SCHEDULE_GAP,
+  AQUARIUM_SCHEDULE_INSET,
   AQUARIUM_SCHEDULE_MARKER_HEIGHT,
   AQUARIUM_SCHEDULE_MARKER_RADIUS,
   AQUARIUM_SCHEDULE_REFRESH_MS,
@@ -915,47 +917,43 @@ export class M3AquariumCard extends TemplatedCard(LitElement) implements Lovelac
     return `${current.device} · ${text}`;
   }
 
+  /**
+   * The day as a bar: the lighting phases in their own colours, with a marker
+   * for now.
+   *
+   * Divs rather than the SVG this used to be. The SVG stretched x with
+   * `preserveAspectRatio="none"`, which is fine for the phase rects — they are
+   * percentages of the day — but makes a pixel-sized gap around the marker
+   * come out a different width on every card. `calc()` on absolutely
+   * positioned elements mixes the two units correctly and needs no
+   * measurement before the first paint.
+   *
+   * The shape is the Expressive level slider's, from shared/level-slider.ts:
+   * the same idea drawn twice — a position on a scale — so it reads as the
+   * same control rather than as a near-miss.
+   */
   private _renderScheduleBar(phases: AquariumPhase[]) {
     const now = this._nowMinutes();
-    const nowPct = (now / 1440) * 100;
-    const trackY = (AQUARIUM_SCHEDULE_MARKER_HEIGHT - AQUARIUM_SCHEDULE_TRACK_HEIGHT) / 2;
+    const nowFraction = now / 1440;
+
     return html`
       <div class="schedule-bar">
-        <div class="schedule-track-wrap" style=${`height: ${AQUARIUM_SCHEDULE_MARKER_HEIGHT}px;`}>
-          <svg
-            class="schedule-svg"
-            viewBox="0 0 100 ${AQUARIUM_SCHEDULE_MARKER_HEIGHT}"
-            preserveAspectRatio="none"
-            width="100%"
-            height=${AQUARIUM_SCHEDULE_MARKER_HEIGHT}
-          >
-            <rect
-              class="schedule-track"
-              x="0"
-              y=${trackY}
-              width="100"
-              height=${AQUARIUM_SCHEDULE_TRACK_HEIGHT}
-              rx=${AQUARIUM_SCHEDULE_TRACK_RADIUS}
-            ></rect>
+        <div class="schedule-track-wrap" style=${`--now: ${nowFraction};`}>
+          <div class="schedule-track"></div>
+          <div class="schedule-phases">
             ${phases.map((p) => {
               const current = now >= p.startMin && now < p.endMin;
-              const x = (p.startMin / 1440) * 100;
-              const w = ((p.endMin - p.startMin) / 1440) * 100;
-              return svg`<rect
-                x=${x}
-                y=${trackY}
-                width=${w}
-                height=${AQUARIUM_SCHEDULE_TRACK_HEIGHT}
-                rx=${AQUARIUM_SCHEDULE_TRACK_RADIUS}
-                fill=${p.color}
-                opacity=${current ? 0.85 : 0.5}
-              ></rect>`;
+              const left = (p.startMin / 1440) * 100;
+              const width = ((p.endMin - p.startMin) / 1440) * 100;
+              return html`<span
+                class="schedule-phase"
+                style=${`left: ${left}%; width: ${width}%; background: ${p.color}; opacity: ${
+                  current ? 0.85 : 0.5
+                };`}
+              ></span>`;
             })}
-          </svg>
-          <div
-            class="schedule-now-marker"
-            style=${`left: ${nowPct}%; width: ${AQUARIUM_SCHEDULE_MARKER_WIDTH}px; height: ${AQUARIUM_SCHEDULE_MARKER_HEIGHT}px; margin-left: -${AQUARIUM_SCHEDULE_MARKER_WIDTH / 2}px; border-radius: ${AQUARIUM_SCHEDULE_MARKER_RADIUS}px;`}
-          ></div>
+          </div>
+          <div class="schedule-now-marker"></div>
         </div>
         <div class="schedule-hour-labels">
           ${[0, 6, 12, 18, 24].map((h) => html`<span>${this._hourLabel(h)}</span>`)}
@@ -1188,25 +1186,75 @@ export class M3AquariumCard extends TemplatedCard(LitElement) implements Lovelac
 
       .schedule-track-wrap {
         position: relative;
+        height: ${AQUARIUM_SCHEDULE_MARKER_HEIGHT}px;
+        display: flex;
+        align-items: center;
+        /* Where "now" sits, inset at both ends so the marker stays inside the
+           track at midnight. Everything below positions itself against this,
+           so the marker and the gap in the phases cannot drift apart. */
+        --now-x: calc(
+          ${AQUARIUM_SCHEDULE_INSET}px + var(--now) * (100% - ${AQUARIUM_SCHEDULE_INSET * 2}px)
+        );
       }
 
-      .schedule-svg {
-        display: block;
+      .schedule-track,
+      .schedule-phases {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: ${AQUARIUM_SCHEDULE_TRACK_HEIGHT}px;
+        border-radius: ${AQUARIUM_SCHEDULE_TRACK_RADIUS}px;
       }
 
       .schedule-track {
-        fill: color-mix(in srgb, white 9%, transparent);
+        background: color-mix(in srgb, white 9%, transparent);
+      }
+
+      /* The gap is masked out rather than painted over: the card may be glass,
+         and a stripe in the card colour would show as a bar across it. */
+      .schedule-phases {
+        overflow: hidden;
+        -webkit-mask-image: linear-gradient(
+          to right,
+          #000 calc(var(--now-x) - ${AQUARIUM_SCHEDULE_GAP}px),
+          transparent calc(var(--now-x) - ${AQUARIUM_SCHEDULE_GAP}px),
+          transparent calc(var(--now-x) + ${AQUARIUM_SCHEDULE_GAP + AQUARIUM_SCHEDULE_MARKER_WIDTH}px),
+          #000 calc(var(--now-x) + ${AQUARIUM_SCHEDULE_GAP + AQUARIUM_SCHEDULE_MARKER_WIDTH}px)
+        );
+        mask-image: linear-gradient(
+          to right,
+          #000 calc(var(--now-x) - ${AQUARIUM_SCHEDULE_GAP}px),
+          transparent calc(var(--now-x) - ${AQUARIUM_SCHEDULE_GAP}px),
+          transparent calc(var(--now-x) + ${AQUARIUM_SCHEDULE_GAP + AQUARIUM_SCHEDULE_MARKER_WIDTH}px),
+          #000 calc(var(--now-x) + ${AQUARIUM_SCHEDULE_GAP + AQUARIUM_SCHEDULE_MARKER_WIDTH}px)
+        );
+      }
+
+      .schedule-phase {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-radius: ${AQUARIUM_SCHEDULE_TRACK_RADIUS}px;
       }
 
       .schedule-now-marker {
         position: absolute;
-        top: 0;
+        left: var(--now-x);
+        width: ${AQUARIUM_SCHEDULE_MARKER_WIDTH}px;
+        height: ${AQUARIUM_SCHEDULE_MARKER_HEIGHT}px;
+        border-radius: ${AQUARIUM_SCHEDULE_MARKER_RADIUS}px;
         background: var(--m3p-text);
         transition: left 1s linear;
       }
 
       .card-inner.no-animations .schedule-now-marker {
         transition: none;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .schedule-now-marker {
+          transition: none;
+        }
       }
 
       .schedule-hour-labels {

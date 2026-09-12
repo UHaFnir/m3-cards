@@ -1,5 +1,14 @@
 import type { CornerRadiusConfig, HvacMode, WeatherChipType, ClimateOverviewTempThresholds } from "./types";
 import { RADIUS, HEIGHT, SPACING, DURATION_MS, PALETTE } from "./shared/tokens";
+import {
+  LEVEL_EDGE_INSET,
+  LEVEL_HANDLE_HEIGHT,
+  LEVEL_HANDLE_RADIUS,
+  LEVEL_HANDLE_WIDTH,
+  LEVEL_TRACK_GAP,
+  LEVEL_TRACK_HEIGHT,
+  LEVEL_TRACK_RADIUS,
+} from "./shared/level-slider";
 
 export const CARD_VERSION = "2.3.2";
 
@@ -711,11 +720,19 @@ export const AQUARIUM_WATER_COLOR_BELOW = PALETTE.cool;
 export const AQUARIUM_WATER_COLOR_ABOVE = PALETTE.light;
 export const AQUARIUM_WATER_COLOR_WARN = PALETTE.heat;
 export const AQUARIUM_WATER_WARN_DEVIATION_K = 1;
-export const AQUARIUM_SCHEDULE_TRACK_HEIGHT = 7;
-export const AQUARIUM_SCHEDULE_TRACK_RADIUS = 3.5;
-export const AQUARIUM_SCHEDULE_MARKER_WIDTH = 4;
-export const AQUARIUM_SCHEDULE_MARKER_HEIGHT = 17;
-export const AQUARIUM_SCHEDULE_MARKER_RADIUS = 2;
+// The schedule bar shares its shape with the Expressive level slider in
+// shared/level-slider.ts — a thick track, a straight-line marker, and a gap
+// either side of it. It is the same idea drawn twice (a position on a scale),
+// so it takes the same numbers rather than a second set four pixels off.
+export const AQUARIUM_SCHEDULE_TRACK_HEIGHT = LEVEL_TRACK_HEIGHT;
+export const AQUARIUM_SCHEDULE_TRACK_RADIUS = LEVEL_TRACK_RADIUS;
+export const AQUARIUM_SCHEDULE_MARKER_WIDTH = LEVEL_HANDLE_WIDTH;
+export const AQUARIUM_SCHEDULE_MARKER_HEIGHT = LEVEL_HANDLE_HEIGHT;
+export const AQUARIUM_SCHEDULE_MARKER_RADIUS = LEVEL_HANDLE_RADIUS;
+/** Cut out of the phases either side of the marker, as on the slider. */
+export const AQUARIUM_SCHEDULE_GAP = LEVEL_TRACK_GAP;
+/** Keeps the marker inside the track at midnight and at midnight again. */
+export const AQUARIUM_SCHEDULE_INSET = LEVEL_EDGE_INSET;
 export const AQUARIUM_SCHEDULE_REFRESH_MS = 60 * 1000;
 export const AQUARIUM_CAMERA_BANNER_RADIUS = 20;
 export const AQUARIUM_CAMERA_BANNER_PADDING = 10;
