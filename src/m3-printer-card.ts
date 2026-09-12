@@ -22,6 +22,45 @@ import {
   PRINTER_SECONDARY_RADIUS,
   PRINTER_SECONDARY_TINT,
   PRINTER_STOP_TINT,
+  PRINTER_AMS_BAR_HEIGHT,
+  PRINTER_AMS_PADDING,
+  PRINTER_AMS_RADIUS,
+  PRINTER_AMS_SWATCH,
+  PRINTER_AMS_SWATCH_RADIUS,
+  PRINTER_AMS_TINT,
+  PRINTER_CAMERA_ASPECT,
+  PRINTER_CAMERA_BADGE_RADIUS,
+  PRINTER_CAMERA_BUTTON,
+  PRINTER_CAMERA_BUTTON_RADIUS,
+  PRINTER_CAMERA_BUTTON_RADIUS_ACTIVE,
+  PRINTER_CAMERA_RADIUS,
+  PRINTER_CAMERA_REFRESH_S,
+  PRINTER_FILAMENT_WARN,
+  PRINTER_HEATING_DELTA,
+  PRINTER_NARROW_PX,
+  PRINTER_SPEED_HEIGHT,
+  PRINTER_SPEED_RADIUS,
+  PRINTER_SPEED_RADIUS_ACTIVE,
+  PRINTER_TEMP_LABEL_SIZE,
+  PRINTER_TEMP_PADDING,
+  PRINTER_TEMP_RADIUS,
+  PRINTER_TEMP_TINT,
+  PRINTER_TEMP_VALUE_SIZE,
+  PRINTER_WAVE_AMPLITUDE,
+  PRINTER_WAVE_GAP,
+  PRINTER_WAVE_STROKE,
+  PRINTER_WAVE_SVG_HEIGHT,
+  PRINTER_WAVE_WAVELENGTH,
+  PRINTER_ACCESSORY_HEIGHT,
+  PRINTER_ACCESSORY_ICON,
+  PRINTER_ACCESSORY_ICON_RADIUS,
+  PRINTER_ACCESSORY_ICON_RADIUS_ON,
+  PRINTER_ACCESSORY_RADIUS,
+  PRINTER_DETAIL_CHIP_HEIGHT,
+  PRINTER_DETAIL_CHIP_RADIUS,
+  PRINTER_DETAILS_HEIGHT,
+  PRINTER_DETAILS_RADIUS,
+  PRINTER_DETAILS_RADIUS_OPEN,
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
 import { STANDARD_EASING } from "./shared/animation";
@@ -29,6 +68,8 @@ import { runHaAction, isActionable } from "./shared/actions";
 import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { inkOn, resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
 import { formatNumber } from "./shared/formatting";
+import { buildWavePath } from "./shared/wave";
+import { VisibleTicker } from "./shared/visible-ticker";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { OptimisticState } from "./shared/optimistic-state";
 import { hassChangeMatters } from "./shared/should-update";
@@ -69,6 +110,12 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   @state() private _config?: M3PrinterCardConfig;
   @state() private _tick = 0;
   @state() private _pendingStop = false;
+  /** Bumped by the ticker so the camera still gets a fresh URL. */
+  @state() private _cameraTick = 0;
+  @state() private _detailsOpen?: boolean;
+  private _ticker = new VisibleTicker(this, () => {
+    this._cameraTick++;
+  });
 
   private _optimistic = new OptimisticState<PrinterState>({
     ttlMs: PRINTER_OPTIMISTIC_MS,
@@ -82,6 +129,13 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   private _stopTimer?: number;
   private _discovered?: DiscoveredPrinter;
   private _discoveredFor?: string;
+
+  public static async getConfigElement(): Promise<import("./types").LovelaceCardEditor> {
+    await import("./m3-printer-card-editor");
+    return document.createElement(
+      "m3-printer-card-editor",
+    ) as unknown as import("./types").LovelaceCardEditor;
+  }
 
   public static getStubConfig(hass: HomeAssistant): M3PrinterCardConfig {
     const entity =
@@ -106,8 +160,15 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     return { columns: 12, min_columns: 6, min_rows: 3 };
   }
 
+  public connectedCallback(): void {
+    super.connectedCallback();
+    this._ticker.setCadence("second");
+    this._ticker.connect();
+  }
+
   public disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._ticker.disconnect();
     this._optimistic.clear();
     if (this._stopTimer) clearTimeout(this._stopTimer);
   }
@@ -281,6 +342,443 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     }, 4000) as unknown as number;
   }
 
+  // ---- camera -----------------------------------------------------------------
+
+  /**
+   * The chamber view.
+   *
+   * A still by default, not a stream. A printer's camera runs on the printer's
+   * own CPU and bandwidth, and a dashboard left open on a wall tablet would
+   * hold that open for hours while the machine has better uses for it —
+   * `camera_live` opts in.
+   *
+   * The refresh is driven by VisibleTicker, so it stops when the card scrolls
+   * off screen or the tab is hidden. A layer takes longer than the interval
+   * anyway, so there is nothing to miss.
+   */
+  private _renderCamera(state: PrinterState) {
+    if (this._config?.show_camera === false) return nothing;
+    const entityId = this._entity("camera_entity", "camera");
+    if (!entityId) return nothing;
+    const cameraState = this.hass?.states[entityId];
+    const picture = cameraState?.attributes.entity_picture as string | undefined;
+    if (!picture) return nothing;
+
+    const live = this._config?.camera_live === true && entityId.startsWith("camera.");
+    const refresh = (this._config?.camera_refresh ?? PRINTER_CAMERA_REFRESH_S) * 1000;
+    // An image entity's state is the timestamp of the picture, so it is the
+    // better cache key than a clock: it changes exactly when there is
+    // something new. A camera entity has no such state, hence the bucket.
+    const bucket =
+      entityId.startsWith("image.")
+        ? (cameraState!.state ?? "")
+        : String(Math.floor((this._cameraTick * 1000) / Math.max(1000, refresh)));
+
+    const lightEntity = this._entity("light_entity", "light");
+    const lightOn = lightEntity ? this.hass?.states[lightEntity]?.state === "on" : false;
+    const running = isRunning(state);
+
+    return html`
+      <div class="camera">
+        <img
+          class=${lightEntity && !lightOn ? "dim" : ""}
+          src=${`${picture}${picture.includes("?") ? "&" : "?"}m3=${bucket}`}
+          alt=""
+        />
+        <div class="cam-badge">
+          <span class="dot ${running && live ? "live" : ""}"></span>
+          ${this._t("printer_live")}
+        </div>
+        <div class="cam-actions">
+          ${lightEntity
+            ? html`
+                <button
+                  class="cam-btn ${lightOn ? "on" : ""}"
+                  aria-pressed=${lightOn ? "true" : "false"}
+                  aria-label=${this._t("printer_light")}
+                  title=${this._t("printer_light")}
+                  @click=${() =>
+                    this.hass?.callService(lightEntity.split(".")[0], "toggle", {
+                      entity_id: lightEntity,
+                    })}
+                >
+                  <ha-icon icon=${lightOn ? "mdi:lightbulb-on" : "mdi:lightbulb-outline"}></ha-icon>
+                </button>
+              `
+            : nothing}
+          <button
+            class="cam-btn"
+            aria-label=${this._t("printer_fullscreen")}
+            title=${this._t("printer_fullscreen")}
+            @click=${() => this._fireMoreInfo(entityId)}
+          >
+            <ha-icon icon="mdi:fullscreen"></ha-icon>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ---- progress ---------------------------------------------------------------
+
+  /** Only while a job exists. An idle printer has no progress to report, and a
+   *  bar sitting at zero is worse than no bar. */
+  private _renderProgress(state: PrinterState) {
+    if (this._config?.show_progress === false) return nothing;
+    if (!isRunning(state)) return nothing;
+    const percent = this._numeric(this._entity("progress_entity", "progress"));
+    if (percent === undefined) return nothing;
+
+    const clamped = Math.max(0, Math.min(100, percent));
+    const width = 100;
+    const mid = PRINTER_WAVE_SVG_HEIGHT / 2;
+    const filled = (clamped / 100) * width;
+    // The wave flattens when paused: the shape says "stopped" before the word
+    // does, and a wave that keeps rolling on a paused printer is a lie.
+    const amplitude = state === "paused" ? 0 : PRINTER_WAVE_AMPLITUDE;
+    const path = buildWavePath(0, Math.max(0, filled - PRINTER_WAVE_GAP / 2), amplitude, PRINTER_WAVE_WAVELENGTH, 0, mid);
+
+    return html`
+      <svg class="wave" viewBox=${`0 0 ${width} ${PRINTER_WAVE_SVG_HEIGHT}`} preserveAspectRatio="none">
+        <line
+          class="wave-rest"
+          x1=${Math.min(width, filled + PRINTER_WAVE_GAP / 2)}
+          y1=${mid}
+          x2=${width}
+          y2=${mid}
+        ></line>
+        <path class="wave-fill" d=${path}></path>
+      </svg>
+    `;
+  }
+
+  // ---- temperatures -----------------------------------------------------------
+
+  private _renderTemps() {
+    if (this._config?.show_temps === false) return nothing;
+    const tiles = [
+      {
+        key: "printer_nozzle" as TranslationKey,
+        icon: "mdi:thermometer",
+        color: "#e57368",
+        value: this._numeric(this._entity("nozzle_temp_entity", "nozzleTemp")),
+        target: this._numeric(this._entity("nozzle_target_entity", "nozzleTarget")),
+      },
+      {
+        key: "printer_bed" as TranslationKey,
+        icon: "mdi:grill",
+        color: "#f0a24a",
+        value: this._numeric(this._entity("bed_temp_entity", "bedTemp")),
+        target: this._numeric(this._entity("bed_target_entity", "bedTarget")),
+      },
+      {
+        key: "printer_chamber" as TranslationKey,
+        icon: "mdi:cube-outline",
+        color: "#5dcaa5",
+        value: this._numeric(this._entity("chamber_temp_entity", "chamberTemp")),
+        target: undefined,
+      },
+    ].filter((t) => t.value !== undefined);
+    if (!tiles.length) return nothing;
+
+    return html`
+      <div class="temps">
+        ${tiles.map((tile) => {
+          // Still heating: the value pulses rather than a second badge
+          // appearing, because the number is already the thing being watched.
+          const heating =
+            tile.target !== undefined && tile.target > 0 && tile.value! < tile.target - PRINTER_HEATING_DELTA;
+          return html`
+            <div
+              class="temp"
+              style=${`background: color-mix(in srgb, ${tile.color} ${PRINTER_TEMP_TINT}%, transparent);`}
+            >
+              <ha-icon style=${`color: ${tile.color};`} icon=${tile.icon}></ha-icon>
+              <div class="temp-value ${heating ? "heating" : ""}" style=${`color: ${tile.color};`}>
+                ${formatNumber(this._language, tile.value!, { maximumFractionDigits: 0 })}<span
+                  class="temp-unit"
+                  >°C</span
+                >
+              </div>
+              <div class="temp-label">
+                ${this._t(tile.key)}${tile.target !== undefined && tile.target > 0
+                  ? ` · ${this._t("printer_target").replace("{n}", String(Math.round(tile.target)))}`
+                  : ""}
+              </div>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  // ---- speed profile ----------------------------------------------------------
+
+  private _renderSpeed(state: PrinterState) {
+    if (this._config?.show_speed === false) return nothing;
+    const entityId = this._entity("speed_entity", "speed");
+    if (!entityId) return nothing;
+    const entity = this.hass?.states[entityId];
+    const options = entity?.attributes.options as string[] | undefined;
+    if (!options || options.length < 2) return nothing;
+
+    const icons: Record<string, string> = {
+      silent: "mdi:volume-off",
+      quiet: "mdi:volume-off",
+      standard: "mdi:speedometer",
+      normal: "mdi:speedometer",
+      sport: "mdi:rocket-launch-outline",
+      ludicrous: "mdi:fire",
+      extreme: "mdi:fire",
+    };
+
+    return html`
+      <div class="section-label">${this._t("printer_speed")}</div>
+      <div class="speed-row">
+        ${options.map((option) => {
+          const active = entity!.state === option;
+          const key = option.toLowerCase();
+          const translated = this._t(`printer_speed_${key}` as TranslationKey);
+          const label = translated === `printer_speed_${key}` ? option : translated;
+          return html`
+            <button
+              class="speed ${active ? "active" : ""}"
+              ?disabled=${state === "offline"}
+              aria-pressed=${active ? "true" : "false"}
+              @click=${() =>
+                this.hass?.callService("select", "select_option", {
+                  entity_id: entityId,
+                  option,
+                })}
+            >
+              <ha-icon icon=${icons[key] ?? "mdi:speedometer"}></ha-icon>
+              <span class="speed-label">${label}</span>
+            </button>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  // ---- AMS --------------------------------------------------------------------
+
+  /**
+   * The filament trays.
+   *
+   * The swatch is filled with the tray's own colour, which is the one piece of
+   * information here that a label cannot carry: "PLA" is four characters, but
+   * which of the two PLA spools is the blue one is a question only the colour
+   * answers.
+   */
+  private _renderAms() {
+    if (this._config?.show_ams === false) return nothing;
+    const configured = this._config?.ams_slots;
+    const slots = configured?.length
+      ? configured.map((slot) => ({
+          type: slot.type_entity,
+          color: slot.color_entity,
+          remaining: slot.remaining_entity,
+          entity: slot.type_entity ?? slot.color_entity,
+        }))
+      : (this._entities()?.amsSlots ?? []);
+    if (!slots.length) return nothing;
+
+    const warn = this._config?.filament_warn ?? PRINTER_FILAMENT_WARN;
+
+    return html`
+      <div class="section-label">${this._t("printer_ams")}</div>
+      <div class="ams">
+        ${slots.map((slot) => {
+          const material = this._stateOf(slot.type);
+          const colour = this._stateOf(slot.color);
+          const remaining = this._numeric(slot.remaining);
+          const empty = !material || material.toLowerCase() === "empty";
+          // A colour sensor reports a hex, sometimes with an alpha byte the
+          // browser would read as a fifth digit; the first six are the colour.
+          const swatch = colour
+            ? colour.startsWith("#")
+              ? colour.slice(0, 7)
+              : `#${colour.slice(0, 6)}`
+            : undefined;
+
+          return html`
+            <div
+              class="ams-slot ${empty ? "empty" : ""}"
+              role=${slot.entity ? "button" : nothing}
+              tabindex=${slot.entity ? "0" : nothing}
+              @click=${() => this._fireMoreInfo(slot.entity)}
+            >
+              <div
+                class="ams-swatch ${empty ? "empty" : ""}"
+                style=${!empty && swatch ? `background: ${swatch};` : ""}
+              ></div>
+              <div class="ams-name">${empty ? this._t("printer_ams_empty") : material}</div>
+              ${!empty && remaining !== undefined
+                ? html`
+                    <div class="ams-track">
+                      <div
+                        class="ams-fill ${remaining < warn ? "low" : ""}"
+                        style=${`width: ${Math.max(0, Math.min(100, remaining))}%;`}
+                      ></div>
+                    </div>
+                  `
+                : nothing}
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  // ---- details ----------------------------------------------------------------
+
+  /**
+   * The drawer: everything true but not urgent.
+   *
+   * It stays closed by default because none of it changes what you would do
+   * next — and it is the one block that survives `offline`, because the socket
+   * switch lives in it and that is the only control that can bring the printer
+   * back.
+   */
+  private _renderDetails(state: PrinterState) {
+    if (this._config?.show_details === false) return nothing;
+    const chips = this._detailChips(state);
+    const accessories = this._config?.accessories ?? [];
+    if (!chips.length && !accessories.length) return nothing;
+
+    const open = this._detailsOpen ?? this._config?.details_default_open ?? false;
+
+    return html`
+      <div class="details">
+        <button
+          class="details-toggle ${open ? "open" : ""}"
+          aria-expanded=${String(open)}
+          @click=${() => {
+            this._detailsOpen = !open;
+          }}
+        >
+          <span class="details-icon"><ha-icon icon="mdi:information-outline"></ha-icon></span>
+          <span class="details-label">${this._t("printer_details")}</span>
+          <ha-icon class="details-chevron" icon="mdi:chevron-down"></ha-icon>
+        </button>
+        ${open
+          ? html`
+              ${chips.length
+                ? html`<div class="detail-chips">
+                    ${chips.map(
+                      (chip) => html`
+                        <span class="detail-chip ${chip.tone}">
+                          <ha-icon icon=${chip.icon}></ha-icon>
+                          <span>${chip.text}</span>
+                        </span>
+                      `,
+                    )}
+                  </div>`
+                : nothing}
+              ${accessories.length
+                ? html`<div class="accessories">
+                    ${accessories.map((a) => this._renderAccessory(a))}
+                  </div>`
+                : nothing}
+            `
+          : nothing}
+      </div>
+    `;
+  }
+
+  private _detailChips(
+    state: PrinterState,
+  ): { icon: string; text: string; tone: "plain" | "ok" | "error" }[] {
+    const chips: { icon: string; text: string; tone: "plain" | "ok" | "error" }[] = [];
+    const fmt = (entityId: string | undefined) => {
+      if (!entityId) return undefined;
+      const entity = this.hass?.states[entityId];
+      if (!entity || !this._stateOf(entityId)) return undefined;
+      return this.hass?.formatEntityState?.(entity) ?? entity.state;
+    };
+
+    const start = fmt(this._entity("start_time_entity", "startTime"));
+    if (start && isRunning(state)) {
+      chips.push({
+        icon: "mdi:clock-start",
+        text: this._t("printer_started").replace("{when}", start),
+        tone: "plain",
+      });
+    }
+    const end = fmt(this._entity("end_time_entity", "endTime"));
+    if (end && isRunning(state)) {
+      chips.push({
+        icon: "mdi:clock-end",
+        text: this._t("printer_ends").replace("{when}", end),
+        tone: "plain",
+      });
+    }
+    const power = this._numeric(this._entity("power_entity", "power"));
+    if (power !== undefined) {
+      chips.push({
+        icon: "mdi:flash",
+        text: `${formatNumber(this._language, power, { maximumFractionDigits: 0 })} W`,
+        tone: "plain",
+      });
+    }
+    const onlineEntity = this._entity("online_entity", "online");
+    if (onlineEntity) {
+      const online = this.hass?.states[onlineEntity]?.state === "on";
+      chips.push({
+        icon: online ? "mdi:wifi" : "mdi:wifi-off",
+        text: this._t(online ? "printer_online" : "printer_offline_chip"),
+        tone: online ? "plain" : "error",
+      });
+    }
+    // The error chip is the one that earns the drawer: "no errors" is worth
+    // saying once you have opened it, and an actual fault is shown in full
+    // rather than as a count.
+    const errorEntity = this._entity("error_entity", "error");
+    if (errorEntity) {
+      const raw = this.hass?.states[errorEntity];
+      const value = this._stateOf(errorEntity);
+      const clean = !value || value === "off" || value === "0" || value === "none";
+      chips.push({
+        icon: clean ? "mdi:check-circle-outline" : "mdi:alert-circle-outline",
+        text: clean
+          ? this._t("printer_no_errors")
+          : (this.hass?.formatEntityState?.(raw!) ?? value!),
+        tone: clean ? "ok" : "error",
+      });
+    }
+    return chips;
+  }
+
+  private _renderAccessory(accessory: import("./types").PrinterAccessoryConfig) {
+    const entity = this.hass?.states[accessory.entity];
+    const on = entity?.state === "on";
+    const name = accessory.name ?? entity?.attributes.friendly_name ?? accessory.entity;
+    const power = this._numeric(accessory.power_entity);
+    const colour = accessory.color ? resolveThemeColor(accessory.color) : "var(--m3pr-accent)";
+    const right =
+      power !== undefined && on
+        ? `${formatNumber(this._language, power, { maximumFractionDigits: 0 })} W`
+        : this._t(on ? "printer_online" : "printer_off");
+
+    return html`
+      <button
+        class="accessory ${on ? "on" : ""}"
+        ?disabled=${!entity}
+        style=${on ? `--m3pr-acc: ${colour};` : ""}
+        @click=${() =>
+          this.hass?.callService(accessory.entity.split(".")[0], "toggle", {
+            entity_id: accessory.entity,
+          })}
+      >
+        <span class="accessory-icon">
+          <ha-icon icon=${accessory.icon ?? "mdi:power-plug-outline"}></ha-icon>
+        </span>
+        <span class="accessory-name">${name}</span>
+        <span class="accessory-value">${right}</span>
+      </button>
+    `;
+  }
+
   // ---- render -----------------------------------------------------------------
 
   protected render() {
@@ -314,7 +812,10 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
             colors.cardBackgroundCss ? ` background: ${colors.cardBackgroundCss};` : ""
           }`}
         >
-          ${this._renderHeader(state)} ${this._renderControls(state, pending)}
+          ${this._renderCamera(state)} ${this._renderHeader(state)}
+          ${this._renderProgress(state)} ${this._renderTemps()}
+          ${this._renderControls(state, pending)} ${this._renderSpeed(state)}
+          ${this._renderAms()} ${this._renderDetails(state)}
           ${this._config.card_version ? html`<div class="version">${CARD_VERSION}</div>` : nothing}
         </div>
       </ha-card>
@@ -499,6 +1000,11 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         gap: 12px;
         padding: 14px;
         box-sizing: border-box;
+        /* The narrow-layout rules below measure the card's own column, not the
+           viewport — a printer card in a two-column grid on a desktop is as
+           narrow as one on a phone. Without this the @container rules would
+           silently never match. */
+        container-type: inline-size;
       }
 
       .progress-readout {
@@ -604,6 +1110,438 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         background: #e57368;
         color: #1c1c1c;
         border-radius: ${unsafeCSS(PRINTER_BUTTON_RADIUS_PRESSED)}px;
+      }
+
+      .camera {
+        position: relative;
+        aspect-ratio: ${unsafeCSS(PRINTER_CAMERA_ASPECT)};
+        border-radius: ${unsafeCSS(PRINTER_CAMERA_RADIUS)}px;
+        overflow: hidden;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 6%, transparent);
+        line-height: 0;
+      }
+
+      .camera img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: filter 0.3s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      /* With the chamber light off the picture is dark anyway; dimming it
+         further makes the light button's effect obvious before it is pressed. */
+      .camera img.dim {
+        filter: brightness(0.55);
+      }
+
+      .cam-badge {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 9px;
+        border-radius: ${unsafeCSS(PRINTER_CAMERA_BADGE_RADIUS)}px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        line-height: 1;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(6px);
+      }
+
+      .cam-badge .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #8a8a8a;
+      }
+
+      /* Red only while a stream is actually live — a still image is not. */
+      .cam-badge .dot.live {
+        background: #e57368;
+      }
+
+      .cam-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 6px;
+      }
+
+      .cam-btn {
+        width: ${unsafeCSS(PRINTER_CAMERA_BUTTON)}px;
+        height: ${unsafeCSS(PRINTER_CAMERA_BUTTON)}px;
+        border: none;
+        border-radius: ${unsafeCSS(PRINTER_CAMERA_BUTTON_RADIUS)}px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(6px);
+        --mdc-icon-size: 18px;
+        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)},
+          background 0.25s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .cam-btn.on {
+        border-radius: ${unsafeCSS(PRINTER_CAMERA_BUTTON_RADIUS_ACTIVE)}px;
+        background: #f0c46e;
+        color: #1c1c1c;
+      }
+
+      .wave {
+        width: 100%;
+        height: ${unsafeCSS(PRINTER_WAVE_SVG_HEIGHT)}px;
+        display: block;
+        overflow: visible;
+      }
+
+      .wave-fill {
+        fill: none;
+        stroke: var(--m3pr-accent);
+        stroke-width: ${unsafeCSS(PRINTER_WAVE_STROKE)};
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .wave-rest {
+        stroke: color-mix(in srgb, var(--m3p-text, currentColor) 12%, transparent);
+        stroke-width: ${unsafeCSS(PRINTER_WAVE_STROKE)};
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .temps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+        gap: 6px;
+      }
+
+      .temp {
+        padding: ${unsafeCSS(PRINTER_TEMP_PADDING)}px;
+        border-radius: ${unsafeCSS(PRINTER_TEMP_RADIUS)}px;
+        text-align: center;
+        --mdc-icon-size: 14px;
+      }
+
+      .temp-value {
+        font-size: ${unsafeCSS(PRINTER_TEMP_VALUE_SIZE)}px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      .temp-unit {
+        font-size: 10px;
+        font-weight: 600;
+        opacity: 0.7;
+        margin-left: 1px;
+      }
+
+      .temp-value.heating {
+        animation: m3pr-pulse 1.6s ease-in-out infinite;
+      }
+
+      @keyframes m3pr-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+      }
+
+      .temp-label {
+        font-size: ${unsafeCSS(PRINTER_TEMP_LABEL_SIZE)}px;
+        opacity: 0.5;
+      }
+
+      .section-label {
+        font-size: 11px;
+        font-weight: 600;
+        opacity: 0.55;
+        margin-bottom: -6px;
+      }
+
+      .speed-row {
+        display: flex;
+        gap: 6px;
+      }
+
+      .speed {
+        flex: 1;
+        min-width: 0;
+        height: ${unsafeCSS(PRINTER_SPEED_HEIGHT)}px;
+        border: none;
+        border-radius: ${unsafeCSS(PRINTER_SPEED_RADIUS)}px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        padding: 0 4px;
+        font-family: inherit;
+        cursor: pointer;
+        --mdc-icon-size: 16px;
+        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)},
+          background 0.25s ${unsafeCSS(STANDARD_EASING)},
+          color 0.25s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .speed.active {
+        border-radius: ${unsafeCSS(PRINTER_SPEED_RADIUS_ACTIVE)}px;
+        background: var(--m3pr-accent);
+        color: var(--m3pr-ink);
+      }
+
+      .speed-label {
+        font-size: 8px;
+        font-weight: 600;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ams {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+        gap: 6px;
+      }
+
+      .ams-slot {
+        padding: ${unsafeCSS(PRINTER_AMS_PADDING)}px;
+        border-radius: ${unsafeCSS(PRINTER_AMS_RADIUS)}px;
+        background: color-mix(
+          in srgb,
+          var(--m3p-text, currentColor) ${unsafeCSS(PRINTER_AMS_TINT)}%,
+          transparent
+        );
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+      }
+
+      .ams-swatch {
+        width: ${unsafeCSS(PRINTER_AMS_SWATCH)}px;
+        height: ${unsafeCSS(PRINTER_AMS_SWATCH)}px;
+        border-radius: ${unsafeCSS(PRINTER_AMS_SWATCH_RADIUS)}px;
+        border: 1.5px solid color-mix(in srgb, var(--m3p-text, currentColor) 22%, transparent);
+        box-sizing: border-box;
+      }
+
+      /* An empty tray is drawn as an outline, not as a grey fill: grey is a
+         filament colour, and a dashed hole is not. */
+      .ams-swatch.empty {
+        border-style: dashed;
+        background: transparent;
+      }
+
+      .ams-name {
+        font-size: 9px;
+        font-weight: 700;
+        opacity: 0.85;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .ams-slot.empty .ams-name {
+        font-weight: 500;
+        opacity: 0.45;
+      }
+
+      .ams-track {
+        width: 100%;
+        height: ${unsafeCSS(PRINTER_AMS_BAR_HEIGHT)}px;
+        border-radius: ${unsafeCSS(PRINTER_AMS_BAR_HEIGHT)}px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 10%, transparent);
+        overflow: hidden;
+      }
+
+      .ams-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: #81c784;
+      }
+
+      .ams-fill.low {
+        background: #f0a24a;
+      }
+
+      /* Narrow column: the temperatures stack and the speed pills lose their
+         labels rather than truncating them to two characters. */
+      @container (max-width: ${unsafeCSS(PRINTER_NARROW_PX)}px) {
+        .temps {
+          grid-template-columns: 1fr;
+        }
+        .speed-label {
+          display: none;
+        }
+      }
+
+      .details {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .details-toggle {
+        height: ${unsafeCSS(PRINTER_DETAILS_HEIGHT)}px;
+        border: none;
+        border-radius: ${unsafeCSS(PRINTER_DETAILS_RADIUS)}px;
+        padding: 0 12px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 6%, transparent);
+        color: var(--m3p-text, var(--primary-text-color));
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .details-toggle.open {
+        border-radius: ${unsafeCSS(PRINTER_DETAILS_RADIUS_OPEN)}px;
+      }
+
+      .details-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 8%, transparent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        --mdc-icon-size: 16px;
+      }
+
+      .details-label {
+        flex: 1;
+        text-align: left;
+      }
+
+      .details-chevron {
+        --mdc-icon-size: 20px;
+        opacity: 0.5;
+        transition: transform 0.35s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      /* Points the way it will move, like every other fold in the suite. */
+      .details-toggle:not(.open) .details-chevron {
+        transform: rotate(-90deg);
+      }
+
+      .detail-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .detail-chip {
+        height: ${unsafeCSS(PRINTER_DETAIL_CHIP_HEIGHT)}px;
+        border-radius: ${unsafeCSS(PRINTER_DETAIL_CHIP_RADIUS)}px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        --mdc-icon-size: 14px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+      }
+
+      .detail-chip.ok {
+        background: color-mix(in srgb, #81c784 14%, transparent);
+        color: #81c784;
+      }
+
+      .detail-chip.error {
+        background: color-mix(in srgb, #e57368 16%, transparent);
+        color: #e57368;
+      }
+
+      .accessories {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .accessory {
+        height: ${unsafeCSS(PRINTER_ACCESSORY_HEIGHT)}px;
+        border: none;
+        border-radius: ${unsafeCSS(PRINTER_ACCESSORY_RADIUS)}px;
+        padding: 0 10px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 5%, transparent);
+        color: var(--m3p-text, var(--primary-text-color));
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.25s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .accessory:disabled {
+        cursor: default;
+        opacity: 0.4;
+      }
+
+      .accessory-icon {
+        flex: 0 0 auto;
+        width: ${unsafeCSS(PRINTER_ACCESSORY_ICON)}px;
+        height: ${unsafeCSS(PRINTER_ACCESSORY_ICON)}px;
+        border-radius: ${unsafeCSS(PRINTER_ACCESSORY_ICON_RADIUS)}px;
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 8%, transparent);
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        --mdc-icon-size: 17px;
+        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)},
+          background 0.25s ${unsafeCSS(STANDARD_EASING)},
+          color 0.25s ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      /* Switched on, the icon's container tightens — the same shape-morph the
+         station tiles and the fold arrow use, so "on" looks the same
+         everywhere in the suite. */
+      .accessory.on .accessory-icon {
+        border-radius: ${unsafeCSS(PRINTER_ACCESSORY_ICON_RADIUS_ON)}px;
+        background: color-mix(in srgb, var(--m3pr-acc, var(--m3pr-accent)) 20%, transparent);
+        color: var(--m3pr-acc, var(--m3pr-accent));
+      }
+
+      .accessory-name {
+        flex: 1;
+        text-align: left;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .accessory-value {
+        flex: 0 0 auto;
+        font-size: 12px;
+        font-weight: 700;
+        opacity: 0.55;
+      }
+
+      .accessory.on .accessory-value {
+        opacity: 1;
+        color: var(--m3pr-acc, var(--m3pr-accent));
       }
 
       .version {

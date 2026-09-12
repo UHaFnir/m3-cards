@@ -61,11 +61,28 @@ state_map:
   bereit: idle
 ```
 
-## Options in this version
+## Entity mapping per integration
 
-The card is being built in stages; this covers the header and the controls.
-The camera, progress, temperatures, speed profile, AMS and details blocks
-follow.
+Everything below is found automatically when the integration names things
+recognisably; the table is what to put in the **Sensors** section when it does
+not.
+
+| What the card wants | Bambu Lab | OctoPrint | Moonraker / Klipper | Prusa Connect |
+| --- | --- | --- | --- | --- |
+| `entity` (drives the layout) | `sensor.*_current_stage` | `sensor.*_current_state` | `sensor.*_printer_state` | `sensor.*_printer_state` |
+| Progress | `sensor.*_print_progress` | `sensor.*_job_percentage` | `sensor.*_progress` | `sensor.*_progress` |
+| Remaining | `sensor.*_remaining_time` | `sensor.*_time_remaining` | `sensor.*_print_time_left` | `sensor.*_remaining` |
+| Job name | `sensor.*_task_name` | `sensor.*_current_file` | `sensor.*_filename` | `sensor.*_filename` |
+| Nozzle | `sensor.*_nozzle_temperature` | `sensor.*_tool0_temperature` | `sensor.*_extruder_temperature` | `sensor.*_nozzle_temperature` |
+| Bed | `sensor.*_bed_temperature` | `sensor.*_bed_temperature` | `sensor.*_heater_bed_temperature` | `sensor.*_bed_temperature` |
+| Camera | `image.*_camera` | `camera.*` | `camera.*` | — |
+| Speed profile | `select.*_printing_speed` | — | — | — |
+| AMS | `sensor.*_tray_1_*` … | — | — | — |
+
+OctoPrint sets no translation keys, so its temperatures are found by device
+class instead — that third pass exists for exactly this case.
+
+## Options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -79,6 +96,13 @@ follow.
 | `pause_action`, `resume_action`, `stop_action`, `start_action`, `files_action`, `filament_action`, `preheat_action` | action | — | Full Home Assistant action syntax. Without one, the button opens more-info rather than guessing at a service. |
 | `stage_entity`, `progress_entity`, `remaining_entity`, `layer_entity`, `total_layers_entity`, `job_name_entity`, `online_entity`, `error_entity` | string | discovered | Override any entity the automatic lookup got wrong. |
 | `optimistic_timeout` | number | `35000` | How long a tapped state is shown before the card stops waiting for confirmation. |
+| `show_camera`, `camera_entity`, `camera_live`, `camera_refresh`, `light_entity` | — | — | The chamber view. A still by default — see below. |
+| `show_progress`, `show_temps`, `show_speed`, `show_ams`, `show_details` | boolean | `true` | The blocks. Each also disappears on its own when its entities are missing. |
+| `details_default_open` | boolean | `false` | Whether the drawer starts open. |
+| `filament_warn` | number | `40` | Percent below which a tray's bar turns amber. |
+| `ams_slots` | list | discovered | Per tray: `type_entity`, `color_entity`, `remaining_entity`. |
+| `accessories` | list | — | Switches beside the printer: `entity`, `name`, `icon`, `color`, `power_entity`. |
+| `nozzle_temp_entity`, `nozzle_target_entity`, `bed_temp_entity`, `bed_target_entity`, `chamber_temp_entity`, `speed_entity`, `start_time_entity`, `end_time_entity`, `power_entity`, `camera_entity`, `light_entity` | string | discovered | Override any lookup that got it wrong. |
 | `accent_color`, `text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
 
 ## Stop asks twice
@@ -88,6 +112,40 @@ button sits next to Pause. The first tap arms it — the button turns solid red
 and says *Really stop?* — and only the second one sends. The arming expires
 after a few seconds, so an ignored tap does not leave the card primed.
 `confirm_stop: false` removes the step.
+
+## The camera is a still, not a stream
+
+`camera_live` is off by default, and deliberately. A printer's camera runs on
+the printer's own CPU and bandwidth, and a dashboard left open on a wall tablet
+would hold a stream open for hours while the machine has better uses for both.
+The still refreshes every ten seconds, and only while the card is actually on
+screen — a layer takes longer than that anyway.
+
+An `image` entity is preferred over a `camera` one when the device offers both,
+because an image entity's state is the timestamp of the picture: the browser
+then refetches exactly when there is something new and never otherwise.
+
+## Accessories, and why they outlive "offline"
+
+`accessories` are the switches that belong *with* the printer but not *to* it —
+the socket it is plugged into, the AMS heater, a filament dryer. They live in
+the details drawer, which is the one block that stays usable while the printer
+is offline.
+
+That is the whole point. Every other control is hidden when the machine is
+unreachable, because nothing sent would arrive; the socket is how it comes
+back.
+
+```yaml
+accessories:
+  - entity: switch.drucker_steckdose
+    name: Drucker-Steckdose
+    icon: mdi:power-plug
+    power_entity: sensor.drucker_steckdose_power
+  - entity: switch.ams_heizung
+    name: AMS-Heizung
+    icon: mdi:radiator
+```
 
 ## Finding the entities
 
