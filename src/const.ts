@@ -2045,14 +2045,10 @@ export const SEARCH_FEEDBACK_MS = 180;
 export const DEFAULT_VACUUM_RADIUS = RADIUS.card;
 export const DEFAULT_VACUUM_ICON = "mdi:robot-vacuum";
 
-/** Header squircle. One step up from the appliance card's — the vacuum's
- *  header carries a state colour that should read across a room. */
-export const VACUUM_ICON_SIZE = 46;
-export const VACUUM_ICON_RADIUS = 17;
+/* The header is the suite's shared one (shared/card-header.ts), so its
+   swatch, name and subtitle sizes live there rather than here. Only the tint
+   is the card's own, because the state colour it mixes is. */
 export const VACUUM_ICON_TINT = 16;
-
-export const VACUUM_NAME_SIZE = 15;
-export const VACUUM_STATUS_SIZE = 12;
 
 /** Battery chip in the header's trailing slot. */
 export const VACUUM_BATTERY_HEIGHT = 30;
@@ -2133,8 +2129,7 @@ export const VACUUM_WAVE_SVG_HEIGHT = 16;
 // numbers come from the battery and power-list cards rather than a new scale.
 
 export const DEFAULT_VACUUM_MAINT_ICON = "mdi:tools";
-export const VACUUM_MAINT_ICON_SIZE = 44;
-export const VACUUM_MAINT_ICON_RADIUS = 16;
+/* Swatch size and radius come from the shared header, as on every other card. */
 
 export const VACUUM_PART_ROW_HEIGHT = 52;
 export const VACUUM_PART_ROW_RADIUS = 17;

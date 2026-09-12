@@ -13,8 +13,6 @@ import {
   CARD_VERSION,
   DEFAULT_VACUUM_MAINT_ICON,
   DEFAULT_VACUUM_RADIUS,
-  VACUUM_MAINT_ICON_RADIUS,
-  VACUUM_MAINT_ICON_SIZE,
   VACUUM_PART_ALERT_BELOW,
   VACUUM_PART_BAR_HEIGHT,
   VACUUM_PART_BAR_MIN_WIDTH,
@@ -43,9 +41,11 @@ import { localize, type TranslationKey } from "./localize";
 import { activateOnKey } from "./shared/a11y";
 import { STANDARD_EASING } from "./shared/animation";
 import { readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
 import { resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
 import { formatNumber } from "./shared/formatting";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
+import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { hassChangeMatters } from "./shared/should-update";
 import { PALETTE } from "./shared/tokens";
 import { TemplatedCard } from "./shared/templated-card";
@@ -300,12 +300,14 @@ export class M3VacuumMaintenanceCard
 
     return html`
       <ha-card
-        style=${`--m3vm-accent: ${accent}; --m3vm-icon-bg: ${tintOn(
-          this,
-          accent,
-          this._config.accent_opacity,
-          14,
-        )}; border-radius: ${radius};`}
+        style=${(() => {
+          const iconBg = tintOn(this, accent, this._config!.accent_opacity, 14);
+          return (
+            `--m3vm-accent: ${accent}; --m3vm-icon-bg: ${iconBg}; ` +
+            `--m3p-icon-bg: ${iconBg}; --m3p-icon-color: ${accent}; ` +
+            `border-radius: ${radius};`
+          );
+        })()}
       >
         <div
           class="card-inner ${glassCardClass(this._config.glass_background)}"
@@ -327,6 +329,8 @@ export class M3VacuumMaintenanceCard
     `;
   }
 
+  /** The suite's shared header, with the due-count chip and the fold arrow in
+   *  its trailing slot. */
   private _renderHeader(due: number) {
     const cfg = this._config!;
     const name = cfg.name ?? this._t("vacuum_maint_title");
@@ -337,37 +341,32 @@ export class M3VacuumMaintenanceCard
           ? this._t("vacuum_maint_due_one")
           : this._t("vacuum_maint_due_many").replace("{n}", String(due));
 
-    return html`
-      <div class="header">
-        <div class="icon-swatch">
-          <ha-icon icon=${cfg.icon ?? DEFAULT_VACUUM_MAINT_ICON}></ha-icon>
-        </div>
-        <div class="header-text">
-          <div class="name">${name}</div>
-          <div class="subtitle">${subtitle}</div>
-        </div>
-        ${due > 0
-          ? html`
-              <span class="due-chip">
-                <ha-icon icon="mdi:alert-outline"></ha-icon>
-                <span>${due}</span>
-              </span>
-            `
-          : nothing}
-        ${cfg.collapsible
-          ? html`
-              <button
-                class="fold ${this._folded ? "folded" : ""}"
-                aria-expanded=${String(!this._folded)}
-                aria-label=${name}
-                @click=${this._toggleFold}
-              >
-                <ha-icon icon="mdi:chevron-down"></ha-icon>
-              </button>
-            `
-          : nothing}
-      </div>
+    const trailing = html`
+      ${due > 0
+        ? html`
+            <span class="due-chip">
+              <ha-icon icon="mdi:alert-outline"></ha-icon>
+              <span>${due}</span>
+            </span>
+          `
+        : nothing}
+      ${cfg.collapsible
+        ? renderFoldArrow({
+            folded: this._folded,
+            accent: "var(--m3vm-accent)",
+            host: this,
+            label: name,
+            onToggle: this._toggleFold,
+          })
+        : nothing}
     `;
+
+    return renderCardHeader({
+      icon: cfg.icon ?? DEFAULT_VACUUM_MAINT_ICON,
+      name,
+      subtitle,
+      right: trailing,
+    });
   }
 
   private _renderPart(part: { key: string; entity: string; cfg?: VacuumConsumableConfig }) {
@@ -622,6 +621,8 @@ export class M3VacuumMaintenanceCard
 
   static styles = [
     glassCardStyles,
+    foldArrowStyles,
+    cardHeaderStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -636,42 +637,10 @@ export class M3VacuumMaintenanceCard
         box-sizing: border-box;
       }
 
-      .header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
 
-      .icon-swatch {
-        flex: 0 0 auto;
-        width: ${unsafeCSS(VACUUM_MAINT_ICON_SIZE)}px;
-        height: ${unsafeCSS(VACUUM_MAINT_ICON_SIZE)}px;
-        border-radius: ${unsafeCSS(VACUUM_MAINT_ICON_RADIUS)}px;
-        background: var(--m3vm-icon-bg);
-        color: var(--m3vm-accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        --mdc-icon-size: 22px;
-      }
 
-      .header-text {
-        flex: 1;
-        min-width: 0;
-      }
 
-      .name {
-        font-size: 15px;
-        font-weight: 700;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
 
-      .subtitle {
-        font-size: 12px;
-        opacity: 0.6;
-      }
 
       .due-chip {
         flex: 0 0 auto;
@@ -686,26 +655,6 @@ export class M3VacuumMaintenanceCard
         --mdc-icon-size: 15px;
         background: color-mix(in srgb, var(--m3vm-accent) 16%, transparent);
         color: var(--m3vm-accent);
-      }
-
-      .fold {
-        flex: 0 0 auto;
-        width: 34px;
-        height: 34px;
-        border: none;
-        border-radius: 17px;
-        background: transparent;
-        color: var(--m3p-secondary-text, var(--secondary-text-color));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        --mdc-icon-size: 22px;
-        transition: transform 0.25s ${unsafeCSS(STANDARD_EASING)};
-      }
-
-      .fold.folded {
-        transform: rotate(-90deg);
       }
 
       .parts {

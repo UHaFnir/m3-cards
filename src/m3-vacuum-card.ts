@@ -26,10 +26,7 @@ import {
   VACUUM_BATTERY_LOW,
   VACUUM_BATTERY_OK,
   VACUUM_BATTERY_RADIUS,
-  VACUUM_ICON_RADIUS,
-  VACUUM_ICON_SIZE,
   VACUUM_ICON_TINT,
-  VACUUM_NAME_SIZE,
   VACUUM_OPTIMISTIC_MS,
   VACUUM_PENDING_OPACITY,
   VACUUM_PRIMARY_HEIGHT,
@@ -41,7 +38,6 @@ import {
   VACUUM_SECONDARY_RADIUS,
   VACUUM_SECONDARY_TINT,
   VACUUM_SECONDARY_WIDTH,
-  VACUUM_STATUS_SIZE,
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
 import { formatNumber } from "./shared/formatting";
@@ -56,6 +52,7 @@ import {
   type LevelStep,
 } from "./shared/level-slider";
 import { readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
 // The scroll-fade controller for these rows arrives with PR #15; until it
 // lands the row scrolls without the edge hint, which is what the standalone
 // chip-buttons card did before that PR too.
@@ -72,6 +69,7 @@ import { runHaAction, isActionable } from "./shared/actions";
 import { TapHoldGesture } from "./shared/gestures";
 import { findStateRule } from "./shared/state-rules";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
+import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { resolveCommonColors, resolveThemeColor, tintOn, inkOn } from "./shared/color-config";
 import { hassChangeMatters } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
@@ -439,12 +437,16 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     return html`
       <ha-card
         class=${unavailable ? "unavailable" : activity === "error" ? "errored" : ""}
-        style=${`--m3v-accent: ${accent}; --m3v-icon-bg: ${tintOn(
-          this,
-          accent,
-          this._config.accent_opacity,
-          VACUUM_ICON_TINT,
-        )}; --m3v-ink: ${inkOn(accent, this)}; border-radius: ${radius};`}
+        style=${(() => {
+          const iconBg = tintOn(this, accent, this._config!.accent_opacity, VACUUM_ICON_TINT);
+          // The shared header reads --m3p-icon-*, so the state colour is
+          // handed over in the suite's own variables rather than in ours.
+          return (
+            `--m3v-accent: ${accent}; --m3v-icon-bg: ${iconBg}; ` +
+            `--m3p-icon-bg: ${iconBg}; --m3p-icon-color: ${accent}; ` +
+            `--m3v-ink: ${inkOn(accent, this)}; border-radius: ${radius};`
+          );
+        })()}
       >
         <div
           class="card-inner ${glassCardClass(this._config.glass_background)}"
@@ -494,56 +496,52 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     `;
   }
 
+  /**
+   * The suite's own header, not a private one.
+   *
+   * Seventeen other cards draw this shape through `renderCardHeader`, and a
+   * vacuum has no reason to be the eighteenth with its own 46px swatch two
+   * pixels off everyone else's. The state colour arrives through the same
+   * `--m3p-icon-*` variables every other card sets, and the battery chip and
+   * the fold arrow go in its trailing slot.
+   */
   private _renderHeader(activity: VacuumActivity, pending: boolean) {
     const cfg = this._config!;
     const state = this.hass!.states[cfg.entity];
     const name = cfg.name ?? state.attributes.friendly_name ?? cfg.entity;
     const { level, charging } = this._battery();
 
-    return html`
-      <div class="header">
-        <div
-          class="icon-swatch"
-          role="button"
-          tabindex="0"
-          aria-label=${name}
-          @click=${() => this._headerTap()}
-          @keydown=${activateOnKey(() => this._headerTap())}
-        >
-          <ha-icon
-            icon=${cfg.icon ?? this._stateRule()?.icon ?? activityIcon(activity) ?? DEFAULT_VACUUM_ICON}
-          ></ha-icon>
-        </div>
-        <div class="header-text">
-          <div class="name">${name}</div>
-          <div class="status">${this._statusText(activity, pending)}</div>
-        </div>
-        ${cfg.collapsible
-          ? html`
-              <button
-                class="fold ${this._folded ? "folded" : ""}"
-                aria-expanded=${String(!this._folded)}
-                aria-label=${name}
-                @click=${this._toggleFold}
-              >
-                <ha-icon icon="mdi:chevron-down"></ha-icon>
-              </button>
-            `
-          : nothing}
-        ${level !== undefined
-          ? html`
-              <div
-                class="battery"
-                style=${`color: ${this._batteryColor(level)};`}
-                aria-label=${`${this._t("vacuum_battery")} ${Math.round(level)} %`}
-              >
-                <ha-icon icon=${this._batteryIcon(level, charging)}></ha-icon>
-                <span>${Math.round(level)} %</span>
-              </div>
-            `
-          : nothing}
-      </div>
+    const trailing = html`
+      ${level !== undefined
+        ? html`
+            <div
+              class="battery"
+              style=${`color: ${this._batteryColor(level)};`}
+              aria-label=${`${this._t("vacuum_battery")} ${Math.round(level)} %`}
+            >
+              <ha-icon icon=${this._batteryIcon(level, charging)}></ha-icon>
+              <span>${Math.round(level)} %</span>
+            </div>
+          `
+        : nothing}
+      ${cfg.collapsible
+        ? renderFoldArrow({
+            folded: this._folded,
+            accent: "var(--m3v-accent)",
+            host: this,
+            label: name,
+            onToggle: this._toggleFold,
+          })
+        : nothing}
     `;
+
+    return renderCardHeader({
+      icon: cfg.icon ?? this._stateRule()?.icon ?? activityIcon(activity) ?? DEFAULT_VACUUM_ICON,
+      name,
+      subtitle: this._statusText(activity, pending),
+      onClick: () => this._headerTap(),
+      right: trailing,
+    });
   }
 
   private _renderPrimaryRow(activity: VacuumActivity, pending: boolean) {
@@ -1234,6 +1232,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   static styles = [
     glassCardStyles,
     levelSliderStyles,
+    foldArrowStyles,
+    cardHeaderStyles,
     chipButtonsStyles,
     popupCardStyles,
     css`
@@ -1262,58 +1262,11 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         height: 100%;
       }
 
-      .header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
 
-      .icon-swatch {
-        flex: 0 0 auto;
-        width: ${unsafeCSS(VACUUM_ICON_SIZE)}px;
-        height: ${unsafeCSS(VACUUM_ICON_SIZE)}px;
-        border-radius: ${unsafeCSS(VACUUM_ICON_RADIUS)}px;
-        background: var(--m3v-icon-bg);
-        color: var(--m3v-accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        --mdc-icon-size: 22px;
-        transition:
-          background 0.3s ${unsafeCSS(STANDARD_EASING)},
-          color 0.3s ${unsafeCSS(STANDARD_EASING)};
-      }
 
-      .icon-swatch:focus-visible {
-        outline: 2px solid var(--m3v-accent);
-        outline-offset: 2px;
-      }
 
-      .header-text {
-        flex: 1;
-        min-width: 0;
-      }
 
-      .name {
-        font-size: ${unsafeCSS(VACUUM_NAME_SIZE)}px;
-        font-weight: 700;
-        letter-spacing: -0.1px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        color: var(--m3p-text, var(--primary-text-color));
-      }
 
-      .status {
-        font-size: ${unsafeCSS(VACUUM_STATUS_SIZE)}px;
-        font-weight: 600;
-        color: var(--m3v-accent);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: color 0.3s ${unsafeCSS(STANDARD_EASING)};
-      }
 
       .battery {
         flex: 0 0 auto;
@@ -1327,27 +1280,6 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         font-size: 12px;
         font-weight: 700;
         --mdc-icon-size: 15px;
-      }
-
-      .fold {
-        flex: 0 0 auto;
-        width: 34px;
-        height: 34px;
-        border: none;
-        border-radius: 17px;
-        background: transparent;
-        color: var(--m3p-secondary-text, var(--secondary-text-color));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        --mdc-icon-size: 22px;
-        transition: transform 0.25s ${unsafeCSS(STANDARD_EASING)};
-      }
-
-      /* Pointing the way it will move, not the way it came from. */
-      .fold.folded {
-        transform: rotate(-90deg);
       }
 
       .primary-row {
