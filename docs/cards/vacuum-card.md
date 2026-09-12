@@ -177,6 +177,7 @@ something.
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. |
+| `reminders` | list | — | Recurring chores; only the ones that are **due** appear, as a chip. Same shape as on the maintenance card. |
 | `max_chips` | number | `4` | How many chips before the rest collapse into "+n". Errors are never collapsed. |
 | `buttons` | list | — | Free buttons. The suite's chip buttons, so each takes `entity`, `name`, `icon`, `color`, `show_state`, `tap_action`, `hold_action`, `double_tap_action`. |
 | `buttons_wrap`, `buttons_stretch`, `buttons_justify` | — | wrap | Layout of that row, as on the chip-buttons card. |

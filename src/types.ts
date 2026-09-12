@@ -816,6 +816,11 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigB
   show_mop_intensity?: boolean;
   show_mop_mode?: boolean;
   show_station_chips?: boolean;
+  /**
+   * Recurring chores. Only the ones that are due appear, as a chip — the tile
+   * is for what needs doing, not for a list of what does not.
+   */
+  reminders?: VacuumReminderConfig[];
 
   /**
    * Which two controls sit beside the primary button. `rooms` turns the
@@ -862,6 +867,26 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigB
   card_version?: string;
 }
 
+/**
+ * A recurring chore the vacuum does not track itself — changing the mop pad,
+ * wiping the sensors. Counted against the lifetime run or runtime totals.
+ */
+export interface VacuumReminderConfig {
+  /** Shown on the chip, the row and in the notification. */
+  name: string;
+  icon?: string;
+  /** Due every N runs. */
+  every_runs?: number;
+  /** …or every N hours of runtime. `every_runs` wins if both are set. */
+  every_hours?: number;
+  /**
+   * An `input_number` holding the meter reading at the last acknowledgement.
+   * With one the reminder becomes "N runs since you last did this" and can be
+   * marked done from the card; without one it simply fires on every multiple.
+   */
+  counter_entity?: string;
+}
+
 export interface VacuumConsumableConfig {
   /** Which part. Defaults cover Roborock's six; any other key needs `entity`. */
   key?: string;
@@ -881,6 +906,8 @@ export interface M3VacuumMaintenanceCardConfig extends NotifyConfigBase {
 
   /** Overrides the automatic list entirely. */
   consumables?: VacuumConsumableConfig[];
+  /** Recurring chores counted against the lifetime totals. */
+  reminders?: VacuumReminderConfig[];
   /** Percent of service life below which a part warns, then alerts. */
   warn_below?: number;
   alert_below?: number;

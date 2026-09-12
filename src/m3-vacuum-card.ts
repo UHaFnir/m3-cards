@@ -45,6 +45,7 @@ import {
 import { localize, type TranslationKey } from "./localize";
 import { formatNumber } from "./shared/formatting";
 import { PanZoom, type PanZoomState, PAN_ZOOM_IDENTITY } from "./shared/pan-zoom";
+import { acknowledgeReminder, reminderStates } from "./shared/vacuum-reminders";
 import { stopSwipe } from "./shared/swipe";
 import { activateOnKey } from "./shared/a11y";
 import { STANDARD_EASING } from "./shared/animation";
@@ -1088,7 +1089,13 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     const d = this._entities();
     if (!d) return nothing;
 
-    type Chip = { icon: string; text: string; tone: "error" | "warn" | "plain" };
+    type Chip = {
+      icon: string;
+      text: string;
+      tone: "error" | "warn" | "plain";
+      /** Present only when tapping it does something — ticking a reminder off. */
+      onTap?: () => void;
+    };
     const chips: Chip[] = [];
     const on = (id: string | undefined) =>
       id ? this.hass?.states[id]?.state === "on" : false;
@@ -1108,6 +1115,22 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         icon: "mdi:alert-circle-outline",
         text: `${this._t("vacuum_vacuum_error")}: ${vacError}`,
         tone: "error",
+      });
+    }
+
+    // Only the due ones, and never collapsed away: a reminder that is not due
+    // is not news, and one that is competes with an error for attention only
+    // when there is genuinely something to do.
+    const reminders = reminderStates(this.hass, this._config?.reminders, {
+      runs: d.totals.total_count,
+      hours: d.totals.total_time,
+    }).filter((r) => r.due);
+    for (const reminder of reminders) {
+      chips.push({
+        icon: reminder.config.icon ?? "mdi:calendar-refresh-outline",
+        text: reminder.config.name,
+        tone: "warn",
+        onTap: reminder.acknowledgeable ? () => acknowledgeReminder(this.hass, reminder) : undefined,
       });
     }
 
@@ -1150,20 +1173,31 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
 
     if (!chips.length) return nothing;
     const max = this._config?.max_chips ?? VACUUM_MAX_CHIPS;
-    const errors = chips.filter((c) => c.tone === "error");
-    const rest = chips.filter((c) => c.tone !== "error");
-    const shown = [...errors, ...rest].slice(0, Math.max(errors.length, max));
+    // Errors and due reminders are both "something needs doing", so neither is
+    // pushed into the overflow to make room for a chip saying the mop is on.
+    const urgent = chips.filter((c) => c.tone === "error" || !!c.onTap || reminders.some((r) => r.config.name === c.text));
+    const rest = chips.filter((c) => !urgent.includes(c));
+    const shown = [...urgent, ...rest].slice(0, Math.max(urgent.length, max));
     const hidden = chips.length - shown.length;
 
     return html`
       <div class="chips">
         ${shown.map(
-          (c) => html`
-            <span class="chip ${c.tone}">
-              <ha-icon icon=${c.icon}></ha-icon>
-              <span>${c.text}</span>
-            </span>
-          `,
+          (c) =>
+            c.onTap
+              ? html`
+                  <button class="chip ${c.tone} tappable" @click=${c.onTap}>
+                    <ha-icon icon=${c.icon}></ha-icon>
+                    <span>${c.text}</span>
+                    <ha-icon class="chip-check" icon="mdi:check"></ha-icon>
+                  </button>
+                `
+              : html`
+                  <span class="chip ${c.tone}">
+                    <ha-icon icon=${c.icon}></ha-icon>
+                    <span>${c.text}</span>
+                  </span>
+                `,
         )}
         ${hidden > 0
           ? html`<span class="chip plain"
@@ -1543,6 +1577,17 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       .chip.warn {
         background: color-mix(in srgb, #f0a24a 16%, transparent);
         color: #f0a24a;
+      }
+
+      .chip.tappable {
+        border: none;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .chip-check {
+        --mdc-icon-size: 14px;
+        opacity: 0.7;
       }
 
       /* Never collapsed into the overflow, and never quiet. */

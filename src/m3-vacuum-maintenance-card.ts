@@ -49,6 +49,11 @@ import { hassChangeMatters } from "./shared/should-update";
 import { PALETTE } from "./shared/tokens";
 import { TemplatedCard } from "./shared/templated-card";
 import { discoverVacuum, type DiscoveredVacuum } from "./shared/vacuum";
+import {
+  acknowledgeReminder,
+  reminderStates,
+  type ReminderState,
+} from "./shared/vacuum-reminders";
 
 /**
  * The other half of the vacuum pair: what is wearing out, what the dock can be
@@ -284,7 +289,7 @@ export class M3VacuumMaintenanceCard
       const hours = this._numeric(p.entity);
       if (hours === undefined) return false;
       return this._partTone(this._fraction(p.key, hours, p.cfg), hours) !== "ok";
-    }).length;
+    }).length + this._reminders().filter((r) => r.due).length;
 
     return html`
       <ha-card
@@ -306,6 +311,7 @@ export class M3VacuumMaintenanceCard
             ? nothing
             : html`
                 ${parts.length ? html`<div class="parts">${parts.map((p) => this._renderPart(p))}</div>` : nothing}
+                ${this._renderReminders()}
                 ${this._renderStation()} ${this._renderStats()} ${this._renderSettings()}
               `}
           ${this._config.card_version ? html`<div class="version">${CARD_VERSION}</div>` : nothing}
@@ -397,6 +403,90 @@ export class M3VacuumMaintenanceCard
             : nothing}
         </div>
         <div class="part-value" style=${`color: ${color};`}>${value}</div>
+      </div>
+    `;
+  }
+
+  // ---- reminders --------------------------------------------------------------
+
+  private _reminders(): ReminderState[] {
+    const d = this._entities();
+    return reminderStates(this.hass, this._config?.reminders, {
+      runs: d?.totals.total_count,
+      hours: d?.totals.total_time,
+    });
+  }
+
+  /**
+   * Reminders read as rows beside the parts, because that is what they are —
+   * a wear counter the machine does not keep itself. Overdue ones sort to the
+   * top; the rest keep their configured order so the list does not reshuffle
+   * every time a run finishes.
+   */
+  private _renderReminders() {
+    const states = this._reminders();
+    if (!states.length) return nothing;
+    const sorted = [...states].sort((a, b) => Number(b.due) - Number(a.due));
+
+    return html`
+      <div class="block-label">${this._t("vacuum_reminders")}</div>
+      <div class="parts">
+        ${sorted.map((state) => this._renderReminder(state))}
+      </div>
+    `;
+  }
+
+  private _renderReminder(state: ReminderState) {
+    const color = state.due ? this._toneColor("alert") : this._toneColor("ok");
+    const hours = state.basis === "hours";
+    const n = (value: number) =>
+      formatNumber(this._language, Math.abs(value), { maximumFractionDigits: 0 });
+
+    let value: string;
+    if (state.due) {
+      value = this._t("vacuum_reminder_due");
+    } else if (state.remaining !== undefined) {
+      value = this._t(hours ? "vacuum_reminder_in_hours" : "vacuum_reminder_in_runs").replace(
+        "{n}",
+        n(state.remaining),
+      );
+    } else {
+      // No counter helper, so there is no "since" to report — the interval is
+      // the only honest thing to show.
+      const every = hours ? state.config.every_hours : state.config.every_runs;
+      value = this._t(hours ? "vacuum_reminder_every_hours" : "vacuum_reminder_every_runs").replace(
+        "{n}",
+        n(every ?? 0),
+      );
+    }
+
+    return html`
+      <div class="part">
+        <div
+          class="part-icon"
+          style=${`background: color-mix(in srgb, ${color} 16%, transparent); color: ${color};`}
+        >
+          <ha-icon icon=${state.config.icon ?? "mdi:calendar-refresh-outline"}></ha-icon>
+        </div>
+        <div class="part-body">
+          <div class="part-name">${state.config.name}</div>
+          <div class="part-track">
+            <div
+              class="part-fill"
+              style=${`width: max(${VACUUM_PART_BAR_MIN_WIDTH}px, ${(state.progress * 100).toFixed(1)}%); background: ${color};`}
+            ></div>
+          </div>
+        </div>
+        ${state.acknowledgeable && state.due
+          ? html`
+              <button
+                class="ack"
+                @click=${() => acknowledgeReminder(this.hass, state)}
+              >
+                ${this._t("vacuum_reminder_done")}
+              </button>
+            `
+          : html`<div class="part-value" style=${`color: ${color};`}>${value}</div>`}
       </div>
     `;
   }
@@ -682,6 +772,20 @@ export class M3VacuumMaintenanceCard
         font-size: 12px;
         font-weight: 700;
         white-space: nowrap;
+      }
+
+      .ack {
+        flex: 0 0 auto;
+        height: 30px;
+        border: none;
+        border-radius: 15px;
+        padding: 0 12px;
+        background: var(--m3vm-accent);
+        color: var(--m3p-card-background, #1c1c1c);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
       }
 
       .block-label {

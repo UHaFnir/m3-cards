@@ -4609,6 +4609,7 @@ something.
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. |
+| `reminders` | list | — | Recurring chores; only the ones that are **due** appear, as a chip. Same shape as on the maintenance card. |
 | `max_chips` | number | `4` | How many chips before the rest collapse into "+n". Errors are never collapsed. |
 | `buttons` | list | — | Free buttons. The suite's chip buttons, so each takes `entity`, `name`, `icon`, `color`, `show_state`, `tap_action`, `hold_action`, `double_tap_action`. |
 | `buttons_wrap`, `buttons_stretch`, `buttons_justify` | — | wrap | Layout of that row, as on the chip-buttons card. |
@@ -4682,10 +4683,44 @@ card cannot press what does not exist, so `show_reset` is off by default and the
 reset stays unavailable until the button is enabled under *Settings → Devices →
 Entities*.
 
+## Reminders for what the vacuum does not count
+
+A mop pad wants changing every few runs, and no sensor tracks that. `reminders`
+counts those against the lifetime run or runtime totals:
+
+```yaml
+type: custom:m3-vacuum-maintenance-card
+entity: vacuum.dobby
+reminders:
+  - name: Wischmopp wechseln
+    icon: mdi:hand-wash-outline
+    every_runs: 3
+```
+
+"Every three runs" needs a reference point, and there are two ways to have one.
+
+**Without a helper** the reminder fires on every multiple — run 3, 6, 9. Nothing
+to set up, and nothing to acknowledge: change the mop after two runs and it will
+still say so on the third.
+
+**With `counter_entity`** — an `input_number` holding the meter reading at the
+last acknowledgement — it becomes a real *"2 runs ago"*, a **Done** button
+appears on the row, and the state lives in Home Assistant rather than in one
+browser. Create the helper under *Settings → Devices & services → Helpers*, with
+a range wide enough for the lifetime count.
+
+`every_hours` counts against total runtime instead; if both are given, hours
+wins.
+
+Due reminders also show up as a chip on the **control card**, if you give it the
+same `reminders` list — the tile then says what needs doing, and tapping the
+chip ticks it off when a counter helper makes that meaningful.
+
 ## Telling you when something is due
 
 The editor can build a Home Assistant automation that checks once a day and
-reports the parts that have fallen below the warning threshold. It is a daily
+reports the parts that have fallen below the warning threshold, together with
+any reminders that have come due. It is a daily
 digest rather than a trigger per sensor for a concrete reason: the sensors
 report hours left against six different service lives, so "below 25 %" is six
 different numbers — working that out once a day in one template is both simpler
@@ -4705,6 +4740,7 @@ custom text.
 | `entity` | string | — | **Required.** The `vacuum` entity. Everything else is found from it. |
 | `name` | string | "Maintenance" | Header title. |
 | `icon` | string | `mdi:tools` | Header icon. |
+| `reminders` | list | — | Recurring chores: `name`, optional `icon`, `every_runs` or `every_hours`, optional `counter_entity`. |
 | `consumables` | list | discovered | Replaces the automatic list. Each entry takes `key` or `entity`, plus `name`, `icon`, `max_hours`. |
 | `warn_below` | number | `25` | Percent of service life at which a part turns amber. |
 | `alert_below` | number | `10` | …and red. |

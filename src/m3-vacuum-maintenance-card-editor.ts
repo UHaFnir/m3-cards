@@ -1,6 +1,11 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { HomeAssistant, LovelaceCardEditor, M3VacuumMaintenanceCardConfig } from "./types";
+import type {
+  HomeAssistant,
+  LovelaceCardEditor,
+  M3VacuumMaintenanceCardConfig,
+  VacuumReminderConfig,
+} from "./types";
 import {
   DEFAULT_VACUUM_MAINT_ICON,
   DEFAULT_VACUUM_RADIUS,
@@ -65,6 +70,51 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
     fireEvent(this, "config-changed", { config });
   }
 
+  private _reminderSchema(): SchemaEntry[] {
+    return [
+      { name: "name", selector: { text: {} } },
+      { name: "icon", selector: { icon: {} } },
+      { name: "every_runs", selector: { number: { min: 1, max: 500, mode: "box" } } },
+      { name: "every_hours", selector: { number: { min: 1, max: 2000, mode: "box" } } },
+      { name: "counter_entity", selector: { entity: { domain: "input_number" } } },
+    ];
+  }
+
+  private _reminderChanged(index: number, ev: CustomEvent): void {
+    if (!this._config) return;
+    const patch = ev.detail.value as Record<string, unknown>;
+    const list = [...(this._config.reminders ?? [])];
+    const next: Record<string, unknown> = { ...list[index], ...patch };
+    // A cleared field means "not set", not "set to empty".
+    for (const key of Object.keys(next)) {
+      if (next[key] === "" || next[key] === null) delete next[key];
+    }
+    list[index] = next as unknown as VacuumReminderConfig;
+    this._emit({ ...this._config, reminders: list });
+  }
+
+  private _addReminder(): void {
+    if (!this._config) return;
+    this._emit({
+      ...this._config,
+      reminders: [
+        ...(this._config.reminders ?? []),
+        { name: this._t("vacuum_reminders"), every_runs: 3 },
+      ],
+    });
+  }
+
+  private _removeReminder(index: number): void {
+    if (!this._config) return;
+    const list = (this._config.reminders ?? []).filter((_, i) => i !== index);
+    if (list.length) {
+      this._emit({ ...this._config, reminders: list });
+    } else {
+      const { reminders: _dropped, ...rest } = this._config;
+      this._emit(rest as M3VacuumMaintenanceCardConfig);
+    }
+  }
+
   private _notifySchema(): SchemaEntry[] {
     return [
       notifyServiceSchema(this.hass),
@@ -122,8 +172,12 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
         const max = VACUUM_PART_MAX_HOURS[key];
         if (max) limits[entityId] = Math.round(max * warn);
       }
-      const ids = Object.keys(limits);
-      if (!ids.length) throw new Error("no part has a known service life");
+      // Reminders join the same digest: both answer "what needs doing", and
+      // two automations that each send a list every morning is one too many.
+      const reminders = (cfg.reminders ?? []).filter((r) => r.every_runs || r.every_hours);
+      if (!Object.keys(limits).length && !reminders.length) {
+        throw new Error("nothing to report: no part has a known service life and no reminders");
+      }
 
       const cardName = cfg.name || this._t("vacuum_maint_title");
       const automationId = resolveAutomationId(
@@ -134,20 +188,49 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       // Collect the names of every part under its own limit. `float(1e9)`
       // makes an unavailable sensor read as "plenty left" rather than as
       // overdue, so a restart does not produce a false alarm.
+      // Each reminder becomes {name, meter entity, interval, mark entity}, so
+      // the template can do the same "is it due" arithmetic the card does —
+      // multiples without a mark, difference with one.
+      const reminderSpecs = reminders.map((r) => ({
+        n: r.name,
+        m: r.every_hours ? found.totals.total_time : found.totals.total_count,
+        e: r.every_hours ?? r.every_runs,
+        h: r.every_hours ? 1 : 0,
+        c: r.counter_entity ?? "",
+      }));
+
       const listTemplate =
         `{% set limits = ${JSON.stringify(limits)} %}` +
+        `{% set rem = ${JSON.stringify(reminderSpecs)} %}` +
         `{% set ns = namespace(items=[]) %}` +
         `{% for e, limit in limits.items() %}{% set s = states[e] %}` +
         `{% if s is not none and s.state not in ['unknown', 'unavailable'] %}` +
         `{% if s.state | float(1e9) <= limit %}` +
         `{% set ns.items = ns.items + [s.name] %}` +
         `{% endif %}{% endif %}{% endfor %}` +
+        `{% for r in rem %}` +
+        `{% set meter = states(r.m) | float(-1) %}` +
+        `{% if meter >= 0 %}` +
+        `{% if r.c != '' %}` +
+        `{% if meter - (states(r.c) | float(0)) >= r.e %}` +
+        `{% set ns.items = ns.items + [r.n] %}{% endif %}` +
+        `{% elif r.h == 0 and meter | int > 0 and (meter | int) % (r.e | int) == 0 %}` +
+        `{% set ns.items = ns.items + [r.n] %}` +
+        `{% endif %}{% endif %}{% endfor %}` +
         `{{ ns.items }}`;
 
       await saveNotifyAutomation(this.hass, {
         id: automationId,
-        alias: `${cardName}: ${this._t("editor_vacuum_notify_parts_alias")}`,
-        description: this._t("editor_vacuum_notify_parts_description"),
+        alias: `${cardName}: ${this._t(
+          reminders.length
+            ? "editor_vacuum_notify_reminder_alias"
+            : "editor_vacuum_notify_parts_alias",
+        )}`,
+        description: this._t(
+          reminders.length
+            ? "editor_vacuum_notify_reminder_description"
+            : "editor_vacuum_notify_parts_description",
+        ),
         mode: "single",
         variables: { due: listTemplate },
         triggers: [{ trigger: "time", at: cfg.notify_time || "09:00:00" }],
@@ -214,6 +297,9 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       show_stats: "editor_vacuum_show_stats",
       show_settings: "editor_vacuum_show_settings",
       show_reset: "editor_vacuum_show_reset",
+      every_runs: "editor_vacuum_every_runs",
+      every_hours: "editor_vacuum_every_hours",
+      counter_entity: "editor_vacuum_counter_entity",
       notify_service: "editor_notify_service",
       notify_time: "editor_vacuum_notify_time",
       notify_title: "editor_notify_title",
@@ -352,6 +438,40 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
               @value-changed=${this._valueChanged}
             ></ha-form>
             <div class="hint">${this._t("editor_vacuum_reset_hint")}</div>
+          </div>
+        </ha-expansion-panel>
+
+        <ha-expansion-panel outlined .header=${this._t("vacuum_reminders")}>
+          <ha-icon slot="leading-icon" icon="mdi:calendar-refresh-outline"></ha-icon>
+          <div class="panel-content">
+            <div class="hint">${this._t("editor_vacuum_reminders_hint")}</div>
+            ${(cfg.reminders ?? []).map(
+              (reminder, index) => html`
+                <ha-expansion-panel outlined .header=${reminder.name || `#${index + 1}`}>
+                  <div class="panel-content">
+                    <ha-form
+                      .hass=${this.hass}
+                      .data=${{
+                        name: reminder.name ?? "",
+                        icon: reminder.icon ?? "",
+                        every_runs: reminder.every_runs,
+                        every_hours: reminder.every_hours,
+                        counter_entity: reminder.counter_entity ?? "",
+                      }}
+                      .schema=${this._reminderSchema()}
+                      .computeLabel=${this._computeLabel}
+                      @value-changed=${(ev: CustomEvent) => this._reminderChanged(index, ev)}
+                    ></ha-form>
+                    <button class="remove-btn" @click=${() => this._removeReminder(index)}>
+                      ${this._t("editor_appliance_remove")}
+                    </button>
+                  </div>
+                </ha-expansion-panel>
+              `,
+            )}
+            <button class="add-btn" @click=${() => this._addReminder()}>
+              <ha-icon icon="mdi:plus"></ha-icon>
+            </button>
           </div>
         </ha-expansion-panel>
 
