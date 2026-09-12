@@ -906,6 +906,14 @@ export interface VacuumConsumableConfig {
   max_hours?: number;
 }
 
+/** The foldable parts of the maintenance card, below the header. */
+export type VacuumMaintenanceBlock =
+  | "parts"
+  | "reminders"
+  | "station"
+  | "stats"
+  | "settings";
+
 export interface M3VacuumMaintenanceCardConfig extends NotifyConfigBase {
   type: string;
   /** The vacuum. Everything else is found on its device and its dock. */
@@ -932,6 +940,11 @@ export interface M3VacuumMaintenanceCardConfig extends NotifyConfigBase {
   show_reset?: boolean;
 
   collapsible?: boolean;
+  /**
+   * Which blocks the fold hides. Left out, it hides all of them — so a card
+   * that only sets `collapsible` behaves as it did before this existed.
+   */
+  collapse_blocks?: VacuumMaintenanceBlock[];
   default_collapsed?: boolean;
   collapse_state_entity?: string;
   collapse_memory?: CollapseMemory;

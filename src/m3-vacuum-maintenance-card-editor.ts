@@ -282,6 +282,22 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       { name: "show_settings", selector: { boolean: {} } },
       { name: "show_reset", selector: { boolean: {} } },
       { name: "collapsible", selector: { boolean: {} } },
+      {
+        name: "collapse_blocks",
+        selector: {
+          select: {
+            multiple: true,
+            mode: "list",
+            options: [
+              { value: "parts", label: this._t("editor_vacuum_maint") },
+              { value: "reminders", label: this._t("vacuum_reminders") },
+              { value: "station", label: this._t("editor_vacuum_show_station") },
+              { value: "stats", label: this._t("editor_vacuum_show_stats") },
+              { value: "settings", label: this._t("editor_vacuum_show_settings") },
+            ],
+          },
+        },
+      },
       { name: "default_collapsed", selector: { boolean: {} } },
     ];
   }
@@ -305,6 +321,7 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       notify_title: "editor_notify_title",
       notify_message: "editor_notify_message",
       collapsible: "editor_vacuum_collapsible",
+      collapse_blocks: "editor_vacuum_collapse_blocks",
       default_collapsed: "editor_vacuum_default_collapsed",
       glass_background: "editor_glass_background",
       ...radiusLabelMap,
@@ -322,6 +339,11 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
     // A cleared field means "use the default", not "show nothing".
     for (const key of ["name", "icon"]) {
       if (next[key] === "") delete next[key];
+    }
+    // Empty means "fold everything", which is the absent key — storing [] would
+    // read as "fold nothing" and leave a chevron that does nothing.
+    if (Array.isArray(next.collapse_blocks) && next.collapse_blocks.length === 0) {
+      delete next.collapse_blocks;
     }
     this._emit(next as unknown as M3VacuumMaintenanceCardConfig);
   }
@@ -395,6 +417,7 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
       show_settings: cfg.show_settings ?? false,
       show_reset: cfg.show_reset ?? false,
       collapsible: cfg.collapsible ?? false,
+      collapse_blocks: cfg.collapse_blocks ?? [],
       default_collapsed: cfg.default_collapsed ?? false,
     };
 
@@ -438,6 +461,7 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
               @value-changed=${this._valueChanged}
             ></ha-form>
             <div class="hint">${this._t("editor_vacuum_reset_hint")}</div>
+            <div class="hint">${this._t("editor_vacuum_collapse_blocks_hint")}</div>
           </div>
         </ha-expansion-panel>
 

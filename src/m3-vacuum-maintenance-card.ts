@@ -7,6 +7,7 @@ import type {
   LovelaceGridOptions,
   M3VacuumMaintenanceCardConfig,
   VacuumConsumableConfig,
+  VacuumMaintenanceBlock,
 } from "./types";
 import {
   CARD_VERSION,
@@ -282,7 +283,13 @@ export class M3VacuumMaintenanceCard
       ? resolveThemeColor(this._config.accent_color)
       : PALETTE.solar;
     const radius = `${this._config.radius ?? DEFAULT_VACUUM_RADIUS}px`;
+    // The header never folds — the "N parts due" line is the reason to look
+    // at this card at all. Of what is below it, the fold hides whatever
+    // `collapse_blocks` names, and everything when it names nothing.
     const folded = !!this._config.collapsible && this._folded;
+    const foldable = this._config.collapse_blocks;
+    const hidden = (block: VacuumMaintenanceBlock): boolean =>
+      folded && (!foldable || foldable.includes(block));
 
     const parts = this._parts();
     const due = parts.filter((p) => {
@@ -307,13 +314,13 @@ export class M3VacuumMaintenanceCard
           }`}
         >
           ${this._renderHeader(due)}
-          ${folded
+          ${hidden("parts") || !parts.length
             ? nothing
-            : html`
-                ${parts.length ? html`<div class="parts">${parts.map((p) => this._renderPart(p))}</div>` : nothing}
-                ${this._renderReminders()}
-                ${this._renderStation()} ${this._renderStats()} ${this._renderSettings()}
-              `}
+            : html`<div class="parts">${parts.map((p) => this._renderPart(p))}</div>`}
+          ${hidden("reminders") ? nothing : this._renderReminders()}
+          ${hidden("station") ? nothing : this._renderStation()}
+          ${hidden("stats") ? nothing : this._renderStats()}
+          ${hidden("settings") ? nothing : this._renderSettings()}
           ${this._config.card_version ? html`<div class="version">${CARD_VERSION}</div>` : nothing}
         </div>
       </ha-card>

@@ -108,6 +108,25 @@ Turning the switch off pauses the automation rather than deleting it, so the
 target and the wording survive. `{teile}` and `{anzahl}` are available in the
 custom text.
 
+## Folding it away
+
+`collapsible` gives the header a chevron. The header itself never folds — the
+"3 parts due soon" line is the reason to look at the card — and
+`collapse_blocks` decides what goes behind it:
+
+```yaml
+type: custom:m3-vacuum-maintenance-card
+entity: vacuum.dobby
+collapsible: true
+default_collapsed: true
+collapse_blocks: [stats, settings]
+```
+
+That keeps the parts, the reminders and the dock tiles in view and puts the
+lifetime totals and the settings row away, which is the split that suits a card
+you glance at for "does anything need doing". Leaving the key out folds
+everything below the header.
+
 ## Options
 
 | Option | Type | Default | Description |
@@ -123,7 +142,8 @@ custom text.
 | `show_stats` | boolean | `true` | Runtime, area and run count. |
 | `show_settings` | boolean | `false` | Child lock, do-not-disturb and volume. |
 | `show_reset` | boolean | `false` | Long-press a part to reset its counter. See above. |
-| `collapsible`, `default_collapsed`, `collapse_state_entity`, `collapse_memory` | — | — | Folds everything below the header, as on the room and heading cards. |
+| `collapsible`, `default_collapsed`, `collapse_state_entity`, `collapse_memory` | — | — | Folds the blocks below the header, as on the room and heading cards. |
+| `collapse_blocks` | list | all | Which blocks the fold hides: `parts`, `reminders`, `station`, `stats`, `settings`. Left out, it hides all of them. |
 | `notify_enabled`, `notify_service`, `notify_time`, `notify_title`, `notify_message` | — | — | The notification above. Off until switched on. |
 | `accent_color`, `text_color`, `secondary_text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
 
