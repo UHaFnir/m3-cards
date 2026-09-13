@@ -83,13 +83,21 @@ describe("primaryIntent", () => {
   it("offers what makes sense from each state", () => {
     expect(primaryIntent("printing")).toBe("pause");
     expect(primaryIntent("paused")).toBe("resume");
-    expect(primaryIntent("idle")).toBe("start");
-    expect(primaryIntent("finished")).toBe("start");
     expect(primaryIntent("error")).toBe("confirm");
   });
 
   it("offers nothing while offline, because nothing would arrive", () => {
     expect(primaryIntent("offline")).toBe("none");
+  });
+
+  it("offers no Start when nothing says what starting would do", () => {
+    expect(primaryIntent("idle")).toBe("none");
+    expect(primaryIntent("finished")).toBe("none");
+  });
+
+  it("offers Start once a start action is configured", () => {
+    expect(primaryIntent("idle", true)).toBe("start");
+    expect(primaryIntent("finished", true)).toBe("start");
   });
 });
 

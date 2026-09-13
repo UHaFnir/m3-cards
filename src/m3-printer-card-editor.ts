@@ -79,6 +79,7 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       { name: "details_default_open", selector: { boolean: {} } },
       { name: "strip_extension", selector: { boolean: {} } },
       { name: "confirm_stop", selector: { boolean: {} } },
+      { name: "confirm_power_off", selector: { boolean: {} } },
       {
         name: "filament_warn",
         selector: { number: { min: 0, max: 100, mode: "box", unit_of_measurement: "%" } },
@@ -196,6 +197,7 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       details_default_open: "editor_printer_details_open",
       strip_extension: "editor_printer_strip_extension",
       confirm_stop: "editor_printer_confirm_stop",
+      confirm_power_off: "editor_printer_confirm_power_off",
       filament_warn: "editor_printer_filament_warn",
       glass_background: "editor_glass_background",
       ...radiusLabelMap,
@@ -293,6 +295,7 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       details_default_open: cfg.details_default_open ?? false,
       strip_extension: cfg.strip_extension ?? true,
       confirm_stop: cfg.confirm_stop ?? true,
+      confirm_power_off: cfg.confirm_power_off ?? true,
       filament_warn: cfg.filament_warn ?? PRINTER_FILAMENT_WARN,
     };
     const sensorData = Object.fromEntries(

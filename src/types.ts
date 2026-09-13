@@ -1045,8 +1045,10 @@ export interface M3PrinterCardConfig {
   /** Drops a `.3mf`/`.gcode` ending from the job name. */
   strip_extension?: boolean;
   filament_warn?: number;
-  /** A stop is irreversible on a printer; asking twice is the default. */
+  /** A stop is irreversible on a printer; asking first is the default. */
   confirm_stop?: boolean;
+  /** So is cutting the power under a running job. Switching *on* never asks. */
+  confirm_power_off?: boolean;
   secondary_actions?: PrinterSecondaryAction[];
   optimistic_timeout?: number;
 

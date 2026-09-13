@@ -2256,3 +2256,22 @@ export const PRINTER_WAVE_AMPLITUDE = 2.4;
 export const PRINTER_WAVE_WAVELENGTH = 20;
 export const PRINTER_WAVE_GAP = 8;
 export const PRINTER_WAVE_SVG_HEIGHT = 16;
+
+// ---- confirm dialog ---------------------------------------------------------
+// The shared "are you sure?" sheet. Sized like a small card rather than a
+// system alert: it sits on top of a card, so it should look like it came from
+// the same suite.
+
+export const CONFIRM_DIALOG_RADIUS = RADIUS.card;
+export const CONFIRM_DIALOG_WIDTH = 340;
+export const CONFIRM_ICON = 44;
+export const CONFIRM_ICON_RADIUS = RADIUS.squircle44;
+export const CONFIRM_ICON_TINT = 16;
+export const CONFIRM_BUTTON_HEIGHT = 48;
+export const CONFIRM_BUTTON_RADIUS = 24;
+/** Morphs to this while pressed, like every other button in the suite. */
+export const CONFIRM_BUTTON_RADIUS_PRESSED = 12;
+export const CONFIRM_BUTTON_PRESS_MS = 400;
+export const CONFIRM_CANCEL_TINT = 8;
+/** The red a destructive confirmation is painted in. */
+export const CONFIRM_DESTRUCTIVE_COLOR = "#e57368";

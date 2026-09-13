@@ -72,6 +72,8 @@ import { buildWavePath } from "./shared/wave";
 import { VisibleTicker } from "./shared/visible-ticker";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { OptimisticState } from "./shared/optimistic-state";
+import { confirmDialogStyles, renderConfirmDialog, type ConfirmRequest } from "./shared/confirm-dialog";
+import { syncDialogOpenState } from "./shared/popup-card";
 import { hassChangeMatters } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
 import {
@@ -109,7 +111,8 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
 
   @state() private _config?: M3PrinterCardConfig;
   @state() private _tick = 0;
-  @state() private _pendingStop = false;
+  /** The question currently on screen, if any. */
+  @state() private _confirm?: ConfirmRequest;
   /** Bumped by the ticker so the camera still gets a fresh URL. */
   @state() private _cameraTick = 0;
   @state() private _detailsOpen?: boolean;
@@ -126,7 +129,6 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       this._tick++;
     },
   });
-  private _stopTimer?: number;
   private _discovered?: DiscoveredPrinter;
   private _discoveredFor?: string;
 
@@ -170,23 +172,63 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     super.disconnectedCallback();
     this._ticker.disconnect();
     this._optimistic.clear();
-    if (this._stopTimer) clearTimeout(this._stopTimer);
+    this._confirm = undefined;
+  }
+
+  /**
+   * A native <dialog> is opened imperatively, not by an attribute, so the
+   * pending question and the element's own state are reconciled here.
+   */
+  protected updated(): void {
+    syncDialogOpenState(
+      this.renderRoot.querySelector("dialog.m3-confirm") as HTMLDialogElement | null,
+      this._confirm !== undefined,
+    );
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
     return hassChangeMatters(changed, this.hass, this._watched());
   }
 
+  /**
+   * Everything the render path reads, which is more than the job.
+   *
+   * Under-declaring here is the one way this optimisation breaks, and the
+   * accessories are where it bites: a socket toggled while the printer is idle
+   * changes nothing else on the card, so without them in the list the row keeps
+   * saying "Off" after the switch has gone on.
+   */
   private _watched(): (string | undefined)[] {
     const d = this._entities();
+    const cfg = this._config;
     return [
-      this._config?.entity,
+      cfg?.entity,
       this._entity("stage_entity", "stage"),
       this._entity("progress_entity", "progress"),
+      this._entity("remaining_entity", "remaining"),
       this._entity("job_name_entity", "jobName"),
       this._entity("layer_entity", "layer"),
+      this._entity("total_layers_entity", "totalLayers"),
+      this._entity("nozzle_temp_entity", "nozzleTemp"),
+      this._entity("nozzle_target_entity", "nozzleTarget"),
+      this._entity("bed_temp_entity", "bedTemp"),
+      this._entity("bed_target_entity", "bedTarget"),
+      this._entity("chamber_temp_entity", "chamberTemp"),
+      this._entity("speed_entity", "speed"),
+      this._entity("camera_entity", "camera"),
+      this._entity("light_entity", "light"),
+      this._entity("power_entity", "power"),
+      this._entity("start_time_entity", "startTime"),
+      this._entity("end_time_entity", "endTime"),
       d?.online,
       d?.error,
+      ...(d?.amsSlots ?? []).flatMap((slot) => [slot.type, slot.color, slot.remaining]),
+      ...(cfg?.ams_slots ?? []).flatMap((slot) => [
+        slot.type_entity,
+        slot.color_entity,
+        slot.remaining_entity,
+      ]),
+      ...(cfg?.accessories ?? []).flatMap((a) => [a.entity, a.power_entity]),
     ];
   }
 
@@ -305,7 +347,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
    */
   private _primary(): void {
     const { state } = this._resolve();
-    const intent = primaryIntent(state);
+    const intent = primaryIntent(state, this._canStart);
     if (intent === "none") return;
     if (intent === "confirm") {
       this._fireMoreInfo(this._entity("error_entity", "error") ?? this._config?.entity);
@@ -320,26 +362,41 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   }
 
   /**
-   * Stopping asks twice by default.
+   * Whether idle and finished get a primary button at all.
    *
-   * A stop on a printer throws away hours of work and a spool's worth of
-   * filament, and the button sits next to Pause. The second tap has to land
-   * within a few seconds, so an ignored first tap does not leave the card
-   * armed indefinitely.
+   * Only when a `start_action` says what starting would do — see
+   * `primaryIntent`. An action explicitly set to `none` is a way of saying "no
+   * button", so it does not count.
+   */
+  private get _canStart(): boolean {
+    const action = this._config?.start_action;
+    return action !== undefined && action.action !== "none";
+  }
+
+  /**
+   * Stopping asks first.
+   *
+   * A stop throws away hours of work and a spool's worth of filament, and the
+   * button sits next to Pause on a surface people tap while walking past it.
+   * This used to be a two-tap arm, which is not a confirmation: it asks the
+   * same question twice and never says what the answer costs. A dialog does
+   * both, and cannot be dismissed by a stray tap in the same place.
    */
   private _stop(): void {
     const cfg = this._config!;
-    if (cfg.confirm_stop === false || this._pendingStop) {
-      this._pendingStop = false;
-      if (this._stopTimer) clearTimeout(this._stopTimer);
-      this._run(cfg.stop_action, () => this._fireMoreInfo(cfg.entity));
+    const send = () => this._run(cfg.stop_action, () => this._fireMoreInfo(cfg.entity));
+    if (cfg.confirm_stop === false) {
+      send();
       return;
     }
-    this._pendingStop = true;
-    if (this._stopTimer) clearTimeout(this._stopTimer);
-    this._stopTimer = setTimeout(() => {
-      this._pendingStop = false;
-    }, 4000) as unknown as number;
+    this._confirm = {
+      title: this._t("printer_stop_confirm"),
+      message: this._t("printer_stop_confirm_body"),
+      confirmLabel: this._t("printer_stop"),
+      cancelLabel: this._t("printer_cancel"),
+      icon: "mdi:stop",
+      onConfirm: send,
+    };
   }
 
   // ---- camera -----------------------------------------------------------------
@@ -765,10 +822,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         class="accessory ${on ? "on" : ""}"
         ?disabled=${!entity}
         style=${on ? `--m3pr-acc: ${colour};` : ""}
-        @click=${() =>
-          this.hass?.callService(accessory.entity.split(".")[0], "toggle", {
-            entity_id: accessory.entity,
-          })}
+        @click=${() => this._toggleAccessory(accessory, on, name)}
       >
         <span class="accessory-icon">
           <ha-icon icon=${accessory.icon ?? "mdi:power-plug-outline"}></ha-icon>
@@ -777,6 +831,38 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         <span class="accessory-value">${right}</span>
       </button>
     `;
+  }
+
+  /**
+   * Switching an accessory *off* asks first; switching one on does not.
+   *
+   * The asymmetry is the whole point. Turning the socket on costs nothing, and
+   * it is the one control that works while the printer is unreachable — making
+   * the way back slower would be the wrong trade. Turning it off in the middle
+   * of a ten-hour print costs the print, and the row sits in a drawer people
+   * scroll past.
+   */
+  private _toggleAccessory(
+    accessory: import("./types").PrinterAccessoryConfig,
+    on: boolean,
+    name: string,
+  ): void {
+    const send = () =>
+      this.hass?.callService(accessory.entity.split(".")[0], "toggle", {
+        entity_id: accessory.entity,
+      });
+    if (!on || this._config?.confirm_power_off === false) {
+      send();
+      return;
+    }
+    this._confirm = {
+      title: this._t("printer_off_confirm").replace("{name}", name),
+      message: this._t("printer_off_confirm_body"),
+      confirmLabel: this._t("printer_switch_off"),
+      cancelLabel: this._t("printer_cancel"),
+      icon: accessory.icon ?? "mdi:power-plug-off-outline",
+      onConfirm: send,
+    };
   }
 
   // ---- render -----------------------------------------------------------------
@@ -819,6 +905,16 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
           ${this._config.card_version ? html`<div class="version">${CARD_VERSION}</div>` : nothing}
         </div>
       </ha-card>
+      <!-- Outside the card, not inside it: a modal dialog is painted in the
+           top layer either way, but ha-card's offline dimming is a plain
+           opacity rule on its children and would take the question with it. -->
+      ${renderConfirmDialog({
+        request: this._confirm,
+        host: this,
+        onCancel: () => {
+          this._confirm = undefined;
+        },
+      })}
     `;
   }
 
@@ -883,7 +979,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
 
   private _renderControls(state: PrinterState, pending: boolean) {
     const cfg = this._config!;
-    const intent = primaryIntent(state);
+    const intent = primaryIntent(state, this._canStart);
     // Offline is the one state with no controls at all — nothing the card can
     // send will reach the machine. The socket switch lives in the details
     // block, which stays live, and that is the way back.
@@ -906,16 +1002,22 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
 
     const secondary = cfg.secondary_actions ?? (["stop", "files", "filament"] as const);
 
+    // No primary button rather than a disabled one: an idle printer with no
+    // start action has nothing to press, and a greyed-out Start invites the
+    // question of why it is greyed out. The secondaries carry the row alone.
     return html`
       <div class="controls">
-        <button
-          class="primary ${pending ? "pending" : ""}"
-          ?disabled=${intent === "none"}
-          @click=${() => this._primary()}
-        >
-          <ha-icon icon=${icon}></ha-icon>
-          <span>${label}</span>
-        </button>
+        ${intent === "none"
+          ? nothing
+          : html`
+              <button
+                class="primary ${pending ? "pending" : ""}"
+                @click=${() => this._primary()}
+              >
+                <ha-icon icon=${icon}></ha-icon>
+                <span>${label}</span>
+              </button>
+            `}
         ${(secondary as readonly PrinterSecondaryAction[])
           .filter((action) => this._secondaryApplies(action, state))
           .map((action) => this._renderSecondary(action))}
@@ -959,17 +1061,16 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       },
     };
     const { icon, key, run } = spec[action];
-    const armed = action === "stop" && this._pendingStop;
-    const label = armed ? this._t("printer_stop_confirm") : this._t(key);
+    const label = this._t(key);
 
     return html`
       <button
-        class="secondary ${action === "stop" ? "stop" : ""} ${armed ? "armed" : ""}"
+        class="secondary ${action === "stop" ? "stop" : ""}"
         aria-label=${label}
         title=${label}
         @click=${run}
       >
-        <ha-icon icon=${armed ? "mdi:alert-outline" : icon}></ha-icon>
+        <ha-icon icon=${icon}></ha-icon>
       </button>
     `;
   }
@@ -977,6 +1078,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   static styles = [
     glassCardStyles,
     cardHeaderStyles,
+    confirmDialogStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -1106,14 +1208,6 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       .secondary.stop {
         background: color-mix(in srgb, #e57368 ${unsafeCSS(PRINTER_STOP_TINT)}%, transparent);
         color: #e57368;
-      }
-
-      /* Armed for the second tap. Filled rather than merely tinted, so it is
-         plainly a different button from the one just pressed. */
-      .secondary.armed {
-        background: #e57368;
-        color: #1c1c1c;
-        border-radius: ${unsafeCSS(PRINTER_BUTTON_RADIUS_PRESSED)}px;
       }
 
       .camera {

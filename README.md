@@ -4815,7 +4815,7 @@ configurable. See `state_map` below.
 | State | What the card shows |
 | --- | --- |
 | **printing / paused** | Everything: job, progress, layer count, controls |
-| **idle / finished** | No progress bar, no percentage, no layer count; the controls become Start |
+| **idle / finished** | No progress bar, no percentage, no layer count, and no primary button unless a `start_action` is configured |
 | **error** | A red outline, and the primary button becomes *Acknowledge error* |
 | **offline** | Dimmed, and **no controls at all** — nothing sent would arrive |
 
@@ -4880,8 +4880,9 @@ class instead — that third pass exists for exactly this case.
 | `strip_extension` | boolean | `true` | Drops `.3mf`/`.gcode` from the job name. |
 | `icon` | string | follows the state | Overrides the header icon. |
 | `secondary_actions` | list | `[stop, files, filament]` | Which small buttons appear: `stop`, `files`, `filament`, `preheat`. |
-| `confirm_stop` | boolean | `true` | Stop asks twice. See below. |
-| `pause_action`, `resume_action`, `stop_action`, `start_action`, `files_action`, `filament_action`, `preheat_action` | action | — | Full Home Assistant action syntax. Without one, the button opens more-info rather than guessing at a service. |
+| `confirm_stop` | boolean | `true` | Stop asks first, in a dialog. See below. |
+| `confirm_power_off` | boolean | `true` | So does switching an accessory **off**. Switching one on never asks. |
+| `pause_action`, `resume_action`, `stop_action`, `start_action`, `files_action`, `filament_action`, `preheat_action` | action | — | Full Home Assistant action syntax. Without one, the button opens more-info rather than guessing at a service. `start_action` additionally decides whether a Start button exists at all — see below. |
 | `stage_entity`, `progress_entity`, `remaining_entity`, `layer_entity`, `total_layers_entity`, `job_name_entity`, `online_entity`, `error_entity` | string | discovered | Override any entity the automatic lookup got wrong. |
 | `optimistic_timeout` | number | `35000` | How long a tapped state is shown before the card stops waiting for confirmation. |
 | `show_camera`, `camera_entity`, `camera_live`, `camera_refresh`, `light_entity` | — | — | The chamber view. A still by default — see below. |
@@ -4893,13 +4894,41 @@ class instead — that third pass exists for exactly this case.
 | `nozzle_temp_entity`, `nozzle_target_entity`, `bed_temp_entity`, `bed_target_entity`, `chamber_temp_entity`, `speed_entity`, `start_time_entity`, `end_time_entity`, `power_entity`, `camera_entity`, `light_entity` | string | discovered | Override any lookup that got it wrong. |
 | `accent_color`, `text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
 
-## Stop asks twice
+## There is no Start button
+
+Nobody starts a print from Home Assistant. A job is sliced, sent to the machine
+and started at the machine or in the slicer; a dashboard has no file to print
+and no way to pick one. An idle printer therefore gets **no primary button** —
+the control row is its secondary buttons alone, which is the honest shape.
+
+The exception is a setup where starting *does* mean something: a queue
+integration, a Klipper macro, a "print the last file again" script. Configure
+`start_action` and the button comes back.
+
+```yaml
+start_action:
+  action: perform-action
+  perform_action: script.print_last_job
+```
+
+## Stop and power-off ask first
 
 A stop throws away hours of work and a spool's worth of filament, and the
-button sits next to Pause. The first tap arms it — the button turns solid red
-and says *Really stop?* — and only the second one sends. The arming expires
-after a few seconds, so an ignored tap does not leave the card primed.
-`confirm_stop: false` removes the step.
+button sits next to Pause on a surface people tap while walking past it. So it
+opens a dialog naming what is about to be lost, with Cancel under the thumb and
+the red confirm beside it. `confirm_stop: false` removes the step.
+
+Switching an accessory **off** asks the same way, because the accessory that
+matters is the socket and cutting it mid-job ends the job.
+`confirm_power_off: false` removes that one.
+
+Switching an accessory **on** never asks, and that asymmetry is deliberate: it
+costs nothing, and it is the one control that still works while the printer is
+unreachable. Making the way back slower would be the wrong trade.
+
+This replaced an older two-tap arm — tap once to turn the button red, again to
+send. That is not a confirmation: it asks the same question twice and never
+says what the answer costs, and two stray taps in the same spot still sent it.
 
 ## The camera is a still, not a stream
 

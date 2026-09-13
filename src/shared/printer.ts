@@ -154,7 +154,21 @@ export function isRunning(state: PrinterState): boolean {
 /** What a tap on the primary button should do, given the state. */
 export type PrinterIntent = "pause" | "resume" | "start" | "confirm" | "none";
 
-export function primaryIntent(state: PrinterState): PrinterIntent {
+/**
+ * `canStart` is not a detail, and it defaults to false on purpose.
+ *
+ * Nobody starts a print from Home Assistant. A job is sliced, sent to the
+ * machine and started at the machine or in the slicer; a dashboard has no file
+ * to print and no way to pick one. The button was here because the state table
+ * looked symmetrical with it — every other state had a primary action, so idle
+ * got one too — which is a reason to draw a diagram, not a button.
+ *
+ * So idle and finished have no primary action unless a `start_action` says what
+ * starting would even mean (a printer with a queue integration, a Klipper macro).
+ * Without one the control row is its secondary buttons alone, which is the
+ * honest shape: there is nothing to press.
+ */
+export function primaryIntent(state: PrinterState, canStart = false): PrinterIntent {
   switch (state) {
     case "printing":
       return "pause";
@@ -162,7 +176,7 @@ export function primaryIntent(state: PrinterState): PrinterIntent {
       return "resume";
     case "idle":
     case "finished":
-      return "start";
+      return canStart ? "start" : "none";
     case "error":
       // Acknowledging is the only thing that helps, and it is the one the
       // vendor's own app offers here too.
