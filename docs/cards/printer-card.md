@@ -193,6 +193,10 @@ would hold a stream open for hours while the machine has better uses for both.
 The still refreshes every ten seconds, and only while the card is actually on
 screen — a layer takes longer than that anyway.
 
+The badge on the picture says which of the two it is — a ten-second still
+labelled *LIVE* is how a stopped print looks like a working one, because the
+picture simply does not change and the badge insists it should.
+
 An `image` entity is preferred over a `camera` one when the device offers both,
 because an image entity's state is the timestamp of the picture: the browser
 then refetches exactly when there is something new and never otherwise.

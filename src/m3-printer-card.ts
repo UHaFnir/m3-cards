@@ -449,9 +449,12 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
           src=${`${picture}${picture.includes("?") ? "&" : "?"}m3=${bucket}`}
           alt=""
         />
+        <!-- The badge says which of the two this is. Labelling a ten-second
+             still "LIVE" is how a stopped print looks like a working one: the
+             picture simply does not change, and the badge insists it should. -->
         <div class="cam-badge">
           <span class="dot ${running && live ? "live" : ""}"></span>
-          ${this._t("printer_live")}
+          ${this._t(live ? "printer_live" : "printer_still")}
         </div>
         <div class="cam-actions">
           ${lightEntity
