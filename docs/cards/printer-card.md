@@ -121,8 +121,10 @@ entities where an integration splits them, the tray entity's own attributes
 where it does not — so `ams_slots` usually needs nothing at all, and naming
 only `type_entity` is enough when everything hangs off that one entity.
 
-A spool that cannot report how much is left reports `-1`, which is shown as no
-bar rather than as an empty one. Two AMS units stay two rows of four; they both
+Each tray shows its material, how much is left as a number, and the same value
+as a bar underneath — both turn amber below `filament_warn`. A spool that cannot
+report how much is left reports `-1`, which is shown as neither rather than as
+an empty one. Two AMS units stay two rows of four; they both
 number their slots 1–4, and merging them would quietly hide half the filament.
 
 ## Options

@@ -699,7 +699,17 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
                 class="ams-swatch ${empty ? "empty" : ""}"
                 style=${!empty && swatch ? `background: ${swatch};` : ""}
               ></div>
-              <div class="ams-name">${empty ? this._t("printer_ams_empty") : material}</div>
+              <div class="ams-head">
+                <span class="ams-name">${empty ? this._t("printer_ams_empty") : material}</span>
+                ${!empty && remaining !== undefined
+                  ? html`<span class="ams-remaining ${remaining < warn ? "low" : ""}"
+                      >${formatNumber(this._language, remaining, { maximumFractionDigits: 0 })}<span
+                        class="ams-unit"
+                        >%</span
+                      ></span
+                    >`
+                  : nothing}
+              </div>
               ${!empty && remaining !== undefined
                 ? html`
                     <div class="ams-track">
@@ -1515,6 +1525,18 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         background: transparent;
       }
 
+      /* Material and remaining share one line. Below the bar they would cost a
+         third row on a tile that is 74px wide at its narrowest, and the number
+         belongs with the name it qualifies rather than under a graph of it. */
+      .ams-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 3px;
+        max-width: 100%;
+        min-width: 0;
+      }
+
       .ams-name {
         font-size: 9px;
         font-weight: 700;
@@ -1522,7 +1544,30 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 100%;
+        min-width: 0;
+      }
+
+      /* Tabular figures so the numbers do not shuffle sideways as the spool
+         runs down from 100 to 99 to 9. */
+      .ams-remaining {
+        flex: 0 0 auto;
+        font-size: 9px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.6;
+      }
+
+      /* Below the warning threshold the number carries the same amber as the
+         bar, at full strength — that is the one reading worth looking up for. */
+      .ams-remaining.low {
+        color: #f0a24a;
+        opacity: 1;
+      }
+
+      .ams-unit {
+        margin-left: 1px;
+        font-size: 7px;
+        opacity: 0.75;
       }
 
       .ams-slot.empty .ams-name {
