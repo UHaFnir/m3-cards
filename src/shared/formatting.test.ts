@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatClock } from "./formatting";
+import { formatClock, formatDuration } from "./formatting";
 
 describe("formatClock", () => {
   const now = Date.parse("2026-09-13T15:00:00Z");
@@ -19,5 +19,32 @@ describe("formatClock", () => {
   it("returns nothing for a value that is not a timestamp", () => {
     expect(formatClock("unknown", "de-DE", now)).toBeUndefined();
     expect(formatClock(undefined, "de-DE", now)).toBeUndefined();
+  });
+});
+
+describe("formatDuration", () => {
+  const strings = { hm: "{h} Std. {m} Min.", m: "{m} Min." };
+
+  it("reads Bambu's hours-as-a-float", () => {
+    // The raw state of a job one minute from done, which is what the header
+    // used to print verbatim.
+    expect(formatDuration("0.0166666666666667", "h", strings)).toBe("1 Min.");
+    expect(formatDuration("2.25", "h", strings)).toBe("2 Std. 15 Min.");
+  });
+
+  it("reads seconds, which is what OctoPrint and Moonraker report", () => {
+    expect(formatDuration("90", "s", strings)).toBe("2 Min.");
+    expect(formatDuration("5400", "s", strings)).toBe("1 Std. 30 Min.");
+  });
+
+  it("treats a bare number as minutes", () => {
+    expect(formatDuration("45", undefined, strings)).toBe("45 Min.");
+  });
+
+  it("gives up on anything that is not a number, so the caller can fall back", () => {
+    expect(formatDuration("2h 14m", undefined, strings)).toBeUndefined();
+    expect(formatDuration("unknown", "h", strings)).toBeUndefined();
+    expect(formatDuration("", "h", strings)).toBeUndefined();
+    expect(formatDuration("5", "parsecs", strings)).toBeUndefined();
   });
 });

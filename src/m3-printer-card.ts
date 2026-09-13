@@ -67,7 +67,7 @@ import { STANDARD_EASING } from "./shared/animation";
 import { runHaAction, isActionable } from "./shared/actions";
 import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { inkOn, resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
-import { formatClock, formatNumber } from "./shared/formatting";
+import { formatClock, formatDuration, formatNumber } from "./shared/formatting";
 import { buildWavePath } from "./shared/wave";
 import { VisibleTicker } from "./shared/visible-ticker";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
@@ -986,7 +986,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     }
 
     const progress = this._numeric(this._entity("progress_entity", "progress"));
-    const remaining = this._stateOf(this._entity("remaining_entity", "remaining"));
+    const remaining = this._remainingText();
     // `undefined` rather than `nothing`: the shared header types its trailing
     // slot as an optional template, and Lit's `nothing` is a symbol.
     const trailing =
@@ -1011,6 +1011,31 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       onClick: () => this._run(cfg.tap_action, () => this._fireMoreInfo(cfg.entity)),
       right: trailing,
     });
+  }
+
+  /**
+   * "Time remaining", in whatever unit the firmware thinks in.
+   *
+   * Bambu reports hours as a float, so the raw state of a job a minute from
+   * finishing is `0.0166666666666667` — which is what the header showed. The
+   * sensor's own unit is what turns that into a number of minutes; an
+   * integration that already formats the value itself has no unit and falls
+   * through to whatever it wrote.
+   */
+  private _remainingText(): string | undefined {
+    const entityId = this._entity("remaining_entity", "remaining");
+    if (!entityId) return undefined;
+    const entity = this.hass?.states[entityId];
+    const raw = this._stateOf(entityId);
+    if (!entity || !raw) return undefined;
+    return (
+      formatDuration(raw, entity.attributes.unit_of_measurement as string | undefined, {
+        hm: this._t("printer_remaining_hm"),
+        m: this._t("printer_remaining_m"),
+      }) ??
+      this.hass?.formatEntityState?.(entity) ??
+      raw
+    );
   }
 
   private _renderControls(state: PrinterState, pending: boolean) {

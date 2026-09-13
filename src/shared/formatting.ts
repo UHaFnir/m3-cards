@@ -101,3 +101,37 @@ export function formatClock(
   const day = new Intl.DateTimeFormat(language, { day: "numeric", month: "short" }).format(date);
   return `${day}, ${time}`;
 }
+
+/**
+ * A duration sensor as a person would say it.
+ *
+ * Printers report "time remaining" in whatever unit the firmware thinks in —
+ * Bambu in hours, OctoPrint and Moonraker in seconds — so the raw state is as
+ * likely to be `0.0166666666666667` as `60`. Home Assistant's own formatter
+ * turns the first into "0h, 1 Min.", which is correct and reads like a
+ * stopwatch; this drops the empty leading unit.
+ *
+ * Returns undefined for anything that is not a number, so a caller can fall
+ * back to whatever the integration already formatted itself.
+ */
+export function formatDuration(
+  raw: string | number | undefined,
+  unit: string | undefined,
+  strings: { hm: string; m: string },
+): string | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) return undefined;
+
+  const perUnit: Record<string, number> = { d: 1440, h: 60, hr: 60, min: 1, m: 1, s: 1 / 60, sec: 1 / 60 };
+  const factor = perUnit[(unit ?? "min").toLowerCase().trim()];
+  if (factor === undefined) return undefined;
+
+  const total = Math.round(value * factor);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours > 0) {
+    return strings.hm.replace("{h}", String(hours)).replace("{m}", String(minutes));
+  }
+  return strings.m.replace("{m}", String(minutes));
+}
