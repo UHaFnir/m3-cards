@@ -1023,6 +1023,8 @@ export interface M3PrinterCardConfig {
   bed_target_entity?: string;
   chamber_temp_entity?: string;
   speed_entity?: string;
+  /** Read-only profile, used when `speed_entity` is unavailable. */
+  speed_state_entity?: string;
   start_time_entity?: string;
   end_time_entity?: string;
   power_entity?: string;

@@ -103,6 +103,7 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       { name: "bed_target_entity", selector: { entity: { domain: "sensor" } } },
       { name: "chamber_temp_entity", selector: { entity: { domain: "sensor" } } },
       { name: "speed_entity", selector: { entity: { domain: "select" } } },
+      { name: "speed_state_entity", selector: { entity: { domain: "sensor" } } },
       { name: "start_time_entity", selector: { entity: { domain: "sensor" } } },
       { name: "end_time_entity", selector: { entity: { domain: "sensor" } } },
       { name: "power_entity", selector: { entity: { domain: "sensor" } } },

@@ -67,7 +67,7 @@ import { STANDARD_EASING } from "./shared/animation";
 import { runHaAction, isActionable } from "./shared/actions";
 import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { inkOn, resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
-import { formatNumber } from "./shared/formatting";
+import { formatClock, formatNumber } from "./shared/formatting";
 import { buildWavePath } from "./shared/wave";
 import { VisibleTicker } from "./shared/visible-ticker";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
@@ -216,6 +216,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       this._entity("bed_target_entity", "bedTarget"),
       this._entity("chamber_temp_entity", "chamberTemp"),
       this._entity("speed_entity", "speed"),
+      this._entity("speed_state_entity", "speedState"),
       this._entity("camera_entity", "camera"),
       this._entity("light_entity", "light"),
       this._entity("power_entity", "power"),
@@ -580,9 +581,22 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   private _renderSpeed(state: PrinterState) {
     if (this._config?.show_speed === false) return nothing;
     const entityId = this._entity("speed_entity", "speed");
-    if (!entityId) return nothing;
-    const entity = this.hass?.states[entityId];
-    const options = entity?.attributes.options as string[] | undefined;
+    const readoutId = this._entity("speed_state_entity", "speedState");
+    const entity = entityId ? this.hass?.states[entityId] : undefined;
+    const readout = readoutId ? this.hass?.states[readoutId] : undefined;
+
+    // Two entities, one answer. Bambu's `select` is unavailable in some
+    // connection modes while the printer prints on perfectly well, and a row of
+    // four pills with none of them lit reads as "no profile" rather than as
+    // "cannot be changed from here". So the value comes from whichever entity
+    // has one, and only the *changing* depends on the select being there.
+    const usable = (value?: string) =>
+      value !== undefined && value !== "unavailable" && value !== "unknown";
+    const selectable = usable(entity?.state);
+    const current = selectable ? entity!.state : readout?.state;
+
+    const options = ((entity?.attributes.options ?? readout?.attributes.options) ??
+      undefined) as string[] | undefined;
     if (!options || options.length < 2) return nothing;
 
     const icons: Record<string, string> = {
@@ -599,18 +613,18 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       <div class="section-label">${this._t("printer_speed")}</div>
       <div class="speed-row">
         ${options.map((option) => {
-          const active = entity!.state === option;
+          const active = current === option;
           const key = option.toLowerCase();
           const translated = this._t(`printer_speed_${key}` as TranslationKey);
           const label = translated === `printer_speed_${key}` ? option : translated;
           return html`
             <button
-              class="speed ${active ? "active" : ""}"
-              ?disabled=${state === "offline"}
+              class="speed ${active ? "active" : ""} ${selectable ? "" : "readonly"}"
+              ?disabled=${state === "offline" || !selectable}
               aria-pressed=${active ? "true" : "false"}
               @click=${() =>
                 this.hass?.callService("select", "select_option", {
-                  entity_id: entityId,
+                  entity_id: entityId!,
                   option,
                 })}
             >
@@ -760,11 +774,17 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     state: PrinterState,
   ): { icon: string; text: string; tone: "plain" | "ok" | "error" }[] {
     const chips: { icon: string; text: string; tone: "plain" | "ok" | "error" }[] = [];
+    // A timestamp sensor formatted by Home Assistant carries its full date,
+    // which inside a chip saying when the print finishes is nine words for one
+    // number. `formatClock` drops today's date and keeps tomorrow's.
     const fmt = (entityId: string | undefined) => {
       if (!entityId) return undefined;
       const entity = this.hass?.states[entityId];
-      if (!entity || !this._stateOf(entityId)) return undefined;
-      return this.hass?.formatEntityState?.(entity) ?? entity.state;
+      const raw = this._stateOf(entityId);
+      if (!entity || !raw) return undefined;
+      return (
+        formatClock(raw, this._language) ?? this.hass?.formatEntityState?.(entity) ?? entity.state
+      );
     };
 
     const start = fmt(this._entity("start_time_entity", "startTime"));
@@ -1407,6 +1427,19 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         border-radius: ${unsafeCSS(PRINTER_SPEED_RADIUS_ACTIVE)}px;
         background: var(--m3pr-accent);
         color: var(--m3pr-ink);
+      }
+
+      /* Readable but not settable: the integration's select is unavailable in
+         this connection mode while the sensor still reports the profile. The
+         active pill keeps its full colour — the value is real, it is only the
+         changing that is not on offer — and the rest step back so the row does
+         not invite a tap it cannot honour. */
+      .speed.readonly {
+        cursor: default;
+      }
+
+      .speed.readonly:not(.active) {
+        opacity: 0.55;
       }
 
       .speed-label {

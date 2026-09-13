@@ -4888,6 +4888,18 @@ where eighty values are an asset rather than a hazard.
 OctoPrint sets no translation keys, so its temperatures are found by device
 class instead — that third pass exists for exactly this case.
 
+## The speed row reads one entity and writes another
+
+Bambu publishes the print profile twice: a `select` that can change it, and a
+sensor that only reports it. The select is `unavailable` in some connection
+modes — hybrid MQTT on a P1S, for one — while the printer prints on perfectly
+happily in Standard, and a row of four pills with none of them lit reads as "no
+profile" rather than as "not changeable from here".
+
+So the value comes from whichever of the two has one, and only the *changing*
+needs the select. Without it the row still shows what the printer is doing,
+with the other pills stepped back so it does not invite a tap it cannot honour.
+
 ## AMS trays
 
 Bambu does not publish a tray as three entities. It publishes **one sensor per
@@ -4922,7 +4934,7 @@ number their slots 1–4, and merging them would quietly hide half the filament.
 | `filament_warn` | number | `40` | Percent below which a tray's bar turns amber. |
 | `ams_slots` | list | discovered | Per tray: `type_entity`, `color_entity`, `remaining_entity`. One entity carrying all three as attributes also works — see below. |
 | `accessories` | list | — | Switches beside the printer: `entity`, `name`, `icon`, `color`, `power_entity`. |
-| `nozzle_temp_entity`, `nozzle_target_entity`, `bed_temp_entity`, `bed_target_entity`, `chamber_temp_entity`, `speed_entity`, `start_time_entity`, `end_time_entity`, `power_entity`, `camera_entity`, `light_entity` | string | discovered | Override any lookup that got it wrong. |
+| `nozzle_temp_entity`, `nozzle_target_entity`, `bed_temp_entity`, `bed_target_entity`, `chamber_temp_entity`, `speed_entity`, `speed_state_entity`, `start_time_entity`, `end_time_entity`, `power_entity`, `camera_entity`, `light_entity` | string | discovered | Override any lookup that got it wrong. |
 | `accent_color`, `text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
 
 ## There is no Start button

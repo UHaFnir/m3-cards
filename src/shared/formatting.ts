@@ -70,3 +70,34 @@ export function formatSince(
   if (hours < 24) return units.hours.replace("{n}", String(hours));
   return units.days.replace("{n}", String(Math.floor(hours / 24)));
 }
+
+/**
+ * A timestamp as short as it can be without being ambiguous.
+ *
+ * Home Assistant's own `formatEntityState` gives a timestamp sensor its full
+ * date — "13. September 2026 um 17:55" — which is correct and useless inside a
+ * chip that says when a print finishes, twenty minutes from now. So the date is
+ * dropped when it is today's, kept in short form when it is not, and a job
+ * running past midnight still says which day it lands on.
+ */
+export function formatClock(
+  iso: string | undefined,
+  language: string,
+  now = Date.now(),
+): string | undefined {
+  if (!iso) return undefined;
+  const when = Date.parse(iso);
+  if (isNaN(when)) return undefined;
+  const date = new Date(when);
+  const today = new Date(now);
+  const sameDay =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+  const time = new Intl.DateTimeFormat(language, { hour: "2-digit", minute: "2-digit" }).format(
+    date,
+  );
+  if (sameDay) return time;
+  const day = new Intl.DateTimeFormat(language, { day: "numeric", month: "short" }).format(date);
+  return `${day}, ${time}`;
+}

@@ -229,6 +229,8 @@ export interface DiscoveredPrinter {
   bedTarget?: string;
   chamberTemp?: string;
   speed?: string;
+  /** Read-only profile, for when the select exists but is unavailable. */
+  speedState?: string;
   startTime?: string;
   endTime?: string;
   power?: string;
@@ -406,6 +408,11 @@ export function discoverPrinter(hass: HomeAssistant, entityId: string): Discover
     pick("image", CAMERA_KEYS) ?? pick("camera", CAMERA_KEYS) ?? inDomain("camera")[0]?.entity_id;
 
   found.speed = pick("select", ["printing_speed", "speed_profile", "print_speed", "speed"]);
+  // Bambu offers both: a `select` that only works in some connection modes and
+  // a sensor that always reports the profile. On a P1S over hybrid MQTT the
+  // select sits at `unavailable` while the printer is quite happily printing in
+  // Standard, so the sensor is what the row should be reading.
+  found.speedState = pick("sensor", ["speed_profile", "printing_speed", "print_speed"]);
   found.light =
     pick("light", ["chamber_light", "light"]) ?? pick("switch", ["chamber_light", "light"]);
   found.online = pick("binary_sensor", ["online", "connected"]);
