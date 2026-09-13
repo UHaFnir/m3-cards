@@ -250,29 +250,90 @@ function suffixOf(entityId: string): string {
   return entityId.slice(entityId.indexOf(".") + 1);
 }
 
-function matches(entry: RegistryEntry, keys: string[]): boolean {
+/**
+ * Whether one registry entry answers to one key.
+ *
+ * `reject` is what keeps a target temperature from being read as a current
+ * one. `sensor.x_target_nozzle_temperature` ends with `_nozzle_temperature`,
+ * so the suffix pass matches it for `nozzleTemp` — and whichever of the two
+ * the registry happened to list first would win. The words are listed in
+ * English and German because entity ids are localised at creation time: a
+ * German install names Bambu's pair `temperatur_der_duse` and
+ * `zieltemperatur_der_duse`, and only the translation key is language-free.
+ */
+function matchesKey(entry: RegistryEntry, key: string, reject?: readonly string[]): boolean {
   const tk = entry.translation_key ?? undefined;
-  if (tk && keys.includes(tk)) return true;
   const suffix = suffixOf(entry.entity_id);
-  return keys.some((k) => suffix === k || suffix.endsWith(`_${k}`));
+  if (reject?.some((word) => tk?.includes(word) || suffix.includes(word))) return false;
+  if (tk === key) return true;
+  return suffix === key || suffix.endsWith(`_${key}`);
 }
 
-const SENSOR_KEYS: Record<string, string[]> = {
-  progress: ["print_progress", "progress", "job_percentage", "percent_complete"],
-  remaining: ["remaining_time", "time_remaining", "print_time_left", "remaining"],
-  layer: ["current_layer", "layer_number", "current_layer_number", "layer"],
-  totalLayers: ["total_layer_count", "total_layers", "layer_count"],
-  jobName: ["task_name", "print_job_name", "job_name", "current_file", "filename"],
-  stage: ["current_stage", "stage", "print_status", "printer_state", "current_state"],
-  nozzleTemp: ["nozzle_temperature", "nozzle_temp", "tool0_temperature", "extruder_temperature"],
-  nozzleTarget: ["target_nozzle_temperature", "nozzle_target_temperature", "tool0_target"],
-  bedTemp: ["bed_temperature", "bed_temp", "heater_bed_temperature"],
-  bedTarget: ["target_bed_temperature", "bed_target_temperature", "bed_target"],
-  chamberTemp: ["chamber_temperature", "chamber_temp"],
-  startTime: ["start_time", "print_start_time"],
-  endTime: ["end_time", "estimated_end_time", "finish_time", "print_end_time"],
-  power: ["power", "current_power"],
+interface SensorSpec {
+  /** Tried in order, so the first is the best answer and the rest are fallbacks. */
+  keys: string[];
+  reject?: string[];
+}
+
+const NOT_A_TARGET = ["target", "ziel", "soll", "consigne", "objetivo"];
+
+const SENSOR_KEYS: Record<string, SensorSpec> = {
+  progress: { keys: ["print_progress", "progress", "job_percentage", "percent_complete"] },
+  remaining: { keys: ["remaining_time", "time_remaining", "print_time_left", "remaining"] },
+  layer: { keys: ["current_layer", "layer_number", "current_layer_number", "layer"] },
+  totalLayers: { keys: ["total_layer_count", "total_layers", "layer_count"] },
+  // Bambu splits these: `subtask_name` is what the user called the job,
+  // `gcode_file` is the file it came from. The name reads better on a header,
+  // so it is asked for first and the filename is the fallback.
+  jobName: {
+    keys: [
+      "subtask_name",
+      "task_name",
+      "print_job_name",
+      "job_name",
+      "current_file",
+      "filename",
+      "gcode_file",
+      "gcode_filename",
+    ],
+  },
+  stage: { keys: ["current_stage", "stage", "print_status", "printer_state", "current_state"] },
+  nozzleTemp: {
+    keys: ["nozzle_temperature", "nozzle_temp", "tool0_temperature", "extruder_temperature"],
+    reject: NOT_A_TARGET,
+  },
+  nozzleTarget: {
+    keys: [
+      "target_nozzle_temp",
+      "target_nozzle_temperature",
+      "nozzle_target_temperature",
+      "nozzle_target",
+      "tool0_target",
+    ],
+  },
+  bedTemp: {
+    keys: ["bed_temperature", "bed_temp", "heater_bed_temperature"],
+    reject: NOT_A_TARGET,
+  },
+  bedTarget: {
+    keys: ["target_bed_temp", "target_bed_temperature", "bed_target_temperature", "bed_target"],
+  },
+  chamberTemp: { keys: ["chamber_temperature", "chamber_temp"], reject: NOT_A_TARGET },
+  startTime: { keys: ["start_time", "print_start_time"] },
+  endTime: { keys: ["end_time", "estimated_end_time", "finish_time", "print_end_time"] },
+  power: { keys: ["power", "current_power"] },
 };
+
+/**
+ * The camera, which is not simply "the first image entity on the device".
+ *
+ * Bambu registers three things that look like one: `camera` (the chamber),
+ * `cover_image` (the model's thumbnail) and `pick_image` (the build-plate
+ * scan). Taking whichever came first showed the thumbnail as the chamber view,
+ * which is wrong in the most convincing possible way — it is a picture of the
+ * right object.
+ */
+const CAMERA_KEYS = ["camera", "chamber_camera", "chamber_image", "camera_image", "webcam"];
 
 /**
  * Collects a printer's companion entities.
@@ -306,11 +367,20 @@ export function discoverPrinter(hass: HomeAssistant, entityId: string): Discover
     (e) => e.device_id && related.has(e.device_id) && hass.states[e.entity_id],
   );
   const inDomain = (domain: string) => siblings.filter((e) => e.entity_id.startsWith(`${domain}.`));
-  const pick = (domain: string, keys: string[]): string | undefined =>
-    inDomain(domain).find((e) => matches(e, keys))?.entity_id;
+  // Key order is priority order, so the loop is over the keys and not over the
+  // entities: otherwise the answer depends on what the registry happened to
+  // list first, which is not something a card should be deciding by.
+  const pick = (domain: string, keys: string[], reject?: string[]): string | undefined => {
+    const pool = inDomain(domain);
+    for (const key of keys) {
+      const hit = pool.find((e) => matchesKey(e, key, reject));
+      if (hit) return hit.entity_id;
+    }
+    return undefined;
+  };
 
-  for (const [field, keys] of Object.entries(SENSOR_KEYS)) {
-    const hit = pick("sensor", keys);
+  for (const [field, spec] of Object.entries(SENSOR_KEYS)) {
+    const hit = pick("sensor", spec.keys, spec.reject);
     if (hit) (found as unknown as Record<string, unknown>)[field] = hit;
   }
 
@@ -329,8 +399,11 @@ export function discoverPrinter(hass: HomeAssistant, entityId: string): Discover
 
   // The camera may be either domain; `image` is preferred because it is a
   // still the browser can cache, and a stream costs the printer bandwidth it
-  // would rather spend on the job.
-  found.camera = inDomain("image")[0]?.entity_id ?? inDomain("camera")[0]?.entity_id;
+  // would rather spend on the job. A camera entity that names itself nothing
+  // recognisable is still a camera, so the domain carries the last pass —
+  // but an unrecognised *image* entity is not, and gets no such benefit.
+  found.camera =
+    pick("image", CAMERA_KEYS) ?? pick("camera", CAMERA_KEYS) ?? inDomain("camera")[0]?.entity_id;
 
   found.speed = pick("select", ["printing_speed", "speed_profile", "print_speed", "speed"]);
   found.light =
@@ -342,6 +415,69 @@ export function discoverPrinter(hass: HomeAssistant, entityId: string): Discover
 
   found.amsSlots = discoverAmsSlots(siblings);
   return found;
+}
+
+/**
+ * One tray, read from whatever the integration offers.
+ *
+ * Bambu does not publish a tray as three entities. It publishes *one* sensor
+ * per slot whose state is the spool's full product name and whose attributes
+ * carry everything else — `type`, `color`, `remain`, `empty`. So a card that
+ * only knows how to read three separate entities finds none of them and draws
+ * four empty trays on a printer with four full ones, which is what it did.
+ *
+ * Dedicated entities still win where they exist (a user override, or an
+ * integration that does split them); the attributes are the fallback.
+ */
+export interface AmsTray {
+  material?: string;
+  color?: string;
+  remaining?: number;
+  empty: boolean;
+}
+
+const AMS_MATERIAL_ATTRS = ["type", "material", "filament_type"];
+const AMS_COLOR_ATTRS = ["color", "colour", "filament_color"];
+const AMS_REMAIN_ATTRS = ["remain", "remaining", "remaining_percent", "level"];
+
+/** State strings that mean "nothing loaded" rather than a material name. */
+const AMS_BLANK = ["", "empty", "unknown", "unavailable", "none", "-", "leer"];
+
+function attr(
+  attributes: Record<string, unknown> | undefined,
+  names: readonly string[],
+): string | undefined {
+  for (const name of names) {
+    const value = attributes?.[name];
+    if (value === undefined || value === null || value === "") continue;
+    return String(value);
+  }
+  return undefined;
+}
+
+export function resolveAmsTray(params: {
+  /** The slot's own entity, when it has one. */
+  state?: { state: string; attributes?: Record<string, unknown> };
+  /** Values already read from dedicated entities; these win. */
+  material?: string;
+  color?: string;
+  remaining?: number;
+}): AmsTray {
+  const attributes = params.state?.attributes;
+  const material = params.material ?? attr(attributes, AMS_MATERIAL_ATTRS) ?? params.state?.state;
+  const color = params.color ?? attr(attributes, AMS_COLOR_ATTRS);
+
+  let remaining = params.remaining;
+  if (remaining === undefined) {
+    const raw = Number(attr(attributes, AMS_REMAIN_ATTRS));
+    // Bambu reports -1 for a spool that cannot report how much is left, which
+    // as a bar would read as "empty" rather than "unknown".
+    if (Number.isFinite(raw) && raw >= 0) remaining = raw;
+  }
+
+  const blank = !material || AMS_BLANK.includes(material.toLowerCase().trim());
+  const empty = attributes?.empty === true || blank;
+  return { material: blank ? undefined : material, color, remaining, empty };
 }
 
 /**
@@ -357,7 +493,12 @@ function discoverAmsSlots(siblings: RegistryEntry[]): DiscoveredPrinter["amsSlot
     const id = entry.entity_id;
     const slot = /(?:tray|slot)[_ ]?(\d+)/i.exec(id)?.[1];
     if (!slot) continue;
-    const existing = bySlot.get(slot) ?? {};
+    // A second AMS repeats slots 1–4, so the unit number is part of the key.
+    // Without it the two units' trays merge into one row of four and half the
+    // filament in the machine is simply not on the card.
+    const unit = /ams[_ ]?(\d+)/i.exec(id)?.[1] ?? "0";
+    const key = `${unit.padStart(3, "0")}-${slot.padStart(3, "0")}`;
+    const existing = bySlot.get(key) ?? {};
     existing.entity ??= id;
     const lower = id.toLowerCase();
     if (lower.includes("type") || lower.includes("material") || lower.includes("filament")) {
@@ -365,9 +506,9 @@ function discoverAmsSlots(siblings: RegistryEntry[]): DiscoveredPrinter["amsSlot
     }
     if (lower.includes("color") || lower.includes("colour")) existing.color ??= id;
     if (lower.includes("remain") || lower.includes("level")) existing.remaining ??= id;
-    bySlot.set(slot, existing);
+    bySlot.set(key, existing);
   }
   return [...bySlot.entries()]
-    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([, value]) => value);
 }

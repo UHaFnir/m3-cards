@@ -83,6 +83,7 @@ import {
   primaryIntent,
   printerStateColor,
   printerStateIcon,
+  resolveAmsTray,
   resolvePrinterState,
   type DiscoveredPrinter,
   type PrinterState,
@@ -222,7 +223,12 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       this._entity("end_time_entity", "endTime"),
       d?.online,
       d?.error,
-      ...(d?.amsSlots ?? []).flatMap((slot) => [slot.type, slot.color, slot.remaining]),
+      ...(d?.amsSlots ?? []).flatMap((slot) => [
+        slot.entity,
+        slot.type,
+        slot.color,
+        slot.remaining,
+      ]),
       ...(cfg?.ams_slots ?? []).flatMap((slot) => [
         slot.type_entity,
         slot.color_entity,
@@ -635,7 +641,9 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
           type: slot.type_entity,
           color: slot.color_entity,
           remaining: slot.remaining_entity,
-          entity: slot.type_entity ?? slot.color_entity,
+          // Doubles as the attribute source, so naming only `type_entity` is
+          // enough for an integration that puts everything on one entity.
+          entity: slot.type_entity ?? slot.color_entity ?? slot.remaining_entity,
         }))
       : (this._entities()?.amsSlots ?? []);
     if (!slots.length) return nothing;
@@ -646,10 +654,15 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       <div class="section-label">${this._t("printer_ams")}</div>
       <div class="ams">
         ${slots.map((slot) => {
-          const material = this._stateOf(slot.type);
-          const colour = this._stateOf(slot.color);
-          const remaining = this._numeric(slot.remaining);
-          const empty = !material || material.toLowerCase() === "empty";
+          // Three entities where an integration splits a tray, the tray
+          // entity's own attributes where it does not — Bambu publishes one
+          // sensor per slot and hangs type, colour and remaining off it.
+          const { material, color: colour, remaining, empty } = resolveAmsTray({
+            state: slot.entity ? this.hass?.states[slot.entity] : undefined,
+            material: this._stateOf(slot.type),
+            color: this._stateOf(slot.color),
+            remaining: this._numeric(slot.remaining),
+          });
           // A colour sensor reports a hex, sometimes with an alpha byte the
           // browser would read as a fifth digit; the first six are the colour.
           const swatch = colour

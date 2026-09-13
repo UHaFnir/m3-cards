@@ -5,6 +5,7 @@ import {
   isRunning,
   optimisticPrinterState,
   primaryIntent,
+  resolveAmsTray,
   printerStateColor,
   resolvePrinterState,
 } from "./printer";
@@ -162,15 +163,74 @@ describe("discoverPrinter", () => {
       "sensor.p1s_stage": { device_id: "dev", translation_key: "current_stage" },
       "sensor.p1s_progress": { device_id: "dev", translation_key: "print_progress" },
       "sensor.p1s_nozzle": { device_id: "dev", translation_key: "nozzle_temperature" },
-      "image.p1s_cover": { device_id: "dev" },
+      "image.p1s_chamber": { device_id: "dev", translation_key: "camera" },
       "select.p1s_speed": { device_id: "dev", translation_key: "printing_speed" },
     });
     const found = discoverPrinter(hass, "sensor.p1s_stage");
     expect(found.stage).toBe("sensor.p1s_stage");
     expect(found.progress).toBe("sensor.p1s_progress");
     expect(found.nozzleTemp).toBe("sensor.p1s_nozzle");
-    expect(found.camera).toBe("image.p1s_cover");
+    expect(found.camera).toBe("image.p1s_chamber");
     expect(found.speed).toBe("select.p1s_speed");
+  });
+
+  it("does not mistake a model thumbnail for the chamber camera", () => {
+    // Bambu registers three image-ish entities and only one of them is the
+    // chamber. Taking whichever came first showed the model's own thumbnail as
+    // a live view — wrong in the most convincing way possible.
+    const hass = fakeHass({
+      "sensor.p1s_stage": { device_id: "dev", translation_key: "stage" },
+      "image.p1s_pick_image": { device_id: "dev", translation_key: "pick_image" },
+      "image.p1s_cover_image": { device_id: "dev", translation_key: "cover_image" },
+      "camera.p1s_kamera": { device_id: "dev", translation_key: "camera" },
+    });
+    expect(discoverPrinter(hass, "sensor.p1s_stage").camera).toBe("camera.p1s_kamera");
+  });
+
+  it("does not read a target temperature as the current one", () => {
+    // The suffix pass matches `..._target_nozzle_temperature` for `nozzleTemp`
+    // too, so without a guard the winner is whichever the registry listed first.
+    const hass = fakeHass({
+      "sensor.p1s_stage": { device_id: "dev", translation_key: "stage" },
+      "sensor.p1s_target_nozzle_temperature": { device_id: "dev" },
+      "sensor.p1s_nozzle_temperature": { device_id: "dev" },
+    });
+    const found = discoverPrinter(hass, "sensor.p1s_stage");
+    expect(found.nozzleTemp).toBe("sensor.p1s_nozzle_temperature");
+    expect(found.nozzleTarget).toBe("sensor.p1s_target_nozzle_temperature");
+  });
+
+  it("finds Bambu's German entity ids by translation key alone", () => {
+    // Entity ids are localised when they are created, so a German install has
+    // nothing an English suffix rule could match. The keys are language-free.
+    const hass = fakeHass({
+      "sensor.p1s_aktueller_arbeitsschritt": { device_id: "dev", translation_key: "stage" },
+      "sensor.p1s_druckfortschritt": { device_id: "dev", translation_key: "print_progress" },
+      "sensor.p1s_name_der_aufgabe": { device_id: "dev", translation_key: "subtask_name" },
+      "sensor.p1s_gcode_dateiname": { device_id: "dev", translation_key: "gcode_file" },
+      "sensor.p1s_temperatur_der_duse": { device_id: "dev", translation_key: "nozzle_temp" },
+      "sensor.p1s_zieltemperatur_der_duse": {
+        device_id: "dev",
+        translation_key: "target_nozzle_temp",
+      },
+      "sensor.p1s_druckbetttemperatur": { device_id: "dev", translation_key: "bed_temp" },
+      "sensor.p1s_zieltemperatur_des_druckbett": {
+        device_id: "dev",
+        translation_key: "target_bed_temp",
+      },
+      "sensor.p1s_gesamtzahl_der_schichten": { device_id: "dev", translation_key: "total_layers" },
+      "sensor.p1s_verbleibende_zeit": { device_id: "dev", translation_key: "remaining_time" },
+    });
+    const found = discoverPrinter(hass, "sensor.p1s_aktueller_arbeitsschritt");
+    expect(found.progress).toBe("sensor.p1s_druckfortschritt");
+    // The job's name, not the file it came from.
+    expect(found.jobName).toBe("sensor.p1s_name_der_aufgabe");
+    expect(found.nozzleTemp).toBe("sensor.p1s_temperatur_der_duse");
+    expect(found.nozzleTarget).toBe("sensor.p1s_zieltemperatur_der_duse");
+    expect(found.bedTemp).toBe("sensor.p1s_druckbetttemperatur");
+    expect(found.bedTarget).toBe("sensor.p1s_zieltemperatur_des_druckbett");
+    expect(found.totalLayers).toBe("sensor.p1s_gesamtzahl_der_schichten");
+    expect(found.remaining).toBe("sensor.p1s_verbleibende_zeit");
   });
 
   it("falls back to the device class when nothing is named recognisably", () => {
@@ -231,5 +291,83 @@ describe("discoverPrinter", () => {
     const found = discoverPrinter(hass, "sensor.loose");
     expect(found.deviceId).toBeUndefined();
     expect(found.amsSlots).toEqual([]);
+  });
+});
+
+describe("resolveAmsTray", () => {
+  // Bambu's real shape, taken off a P1S: one sensor per slot, everything else
+  // in its attributes.
+  const bambu = {
+    state: "Bambu PETG HF",
+    attributes: { type: "PETG", color: "#000000FF", remain: 44, empty: false },
+  };
+
+  it("reads a tray that publishes one entity with attributes", () => {
+    expect(resolveAmsTray({ state: bambu })).toEqual({
+      material: "PETG",
+      color: "#000000FF",
+      remaining: 44,
+      empty: false,
+    });
+  });
+
+  it("prefers dedicated entities where an integration splits them", () => {
+    const tray = resolveAmsTray({ state: bambu, material: "PLA", remaining: 90 });
+    expect(tray.material).toBe("PLA");
+    expect(tray.remaining).toBe(90);
+    expect(tray.color).toBe("#000000FF");
+  });
+
+  it("treats -1 remaining as unknown, not as an empty spool", () => {
+    const tray = resolveAmsTray({
+      state: { state: "PLA", attributes: { type: "PLA", remain: -1 } },
+    });
+    expect(tray.remaining).toBeUndefined();
+    expect(tray.empty).toBe(false);
+  });
+
+  it("falls back to the entity state when there is no type attribute", () => {
+    expect(resolveAmsTray({ state: { state: "ABS", attributes: {} } }).material).toBe("ABS");
+  });
+
+  it("is empty when the tray says so, and when it says nothing", () => {
+    expect(resolveAmsTray({ state: { state: "PLA", attributes: { empty: true } } }).empty).toBe(true);
+    expect(resolveAmsTray({ state: { state: "unknown", attributes: {} } }).empty).toBe(true);
+    expect(resolveAmsTray({}).empty).toBe(true);
+  });
+});
+
+describe("AMS discovery", () => {
+  it("keeps two AMS units apart instead of merging their slots", () => {
+    // Both units number their trays 1–4, so without the unit in the key the
+    // second one's filament simply is not on the card.
+    const hass = fakeHass({
+      "sensor.p1s_stage": { device_id: "dev", translation_key: "stage" },
+      "sensor.p1s_ams_1_slot_1": { device_id: "ams1", translation_key: "tray" },
+      "sensor.p1s_ams_1_slot_2": { device_id: "ams1", translation_key: "tray" },
+      "sensor.p1s_ams_2_slot_1": { device_id: "ams2", translation_key: "tray" },
+      "sensor.p1s_ams_2_slot_2": { device_id: "ams2", translation_key: "tray" },
+    }, { ams1: { via_device_id: "dev" }, ams2: { via_device_id: "dev" } });
+    const slots = discoverPrinter(hass, "sensor.p1s_stage").amsSlots;
+    expect(slots.map((s) => s.entity)).toEqual([
+      "sensor.p1s_ams_1_slot_1",
+      "sensor.p1s_ams_1_slot_2",
+      "sensor.p1s_ams_2_slot_1",
+      "sensor.p1s_ams_2_slot_2",
+    ]);
+  });
+
+  it("sorts by slot number, not by registry order", () => {
+    const hass = fakeHass({
+      "sensor.p1s_stage": { device_id: "dev", translation_key: "stage" },
+      "sensor.p1s_tray_4": { device_id: "dev", translation_key: "tray" },
+      "sensor.p1s_tray_10": { device_id: "dev", translation_key: "tray" },
+      "sensor.p1s_tray_2": { device_id: "dev", translation_key: "tray" },
+    });
+    expect(discoverPrinter(hass, "sensor.p1s_stage").amsSlots.map((s) => s.entity)).toEqual([
+      "sensor.p1s_tray_2",
+      "sensor.p1s_tray_4",
+      "sensor.p1s_tray_10",
+    ]);
   });
 });

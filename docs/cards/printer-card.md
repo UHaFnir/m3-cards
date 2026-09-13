@@ -14,7 +14,7 @@ card is the other approach: **the state decides what is drawn.**
 
 ```yaml
 type: custom:m3-printer-card
-entity: sensor.p1s_current_stage
+entity: sensor.p1s_print_status
 ```
 
 Built against Bambu Lab's integration and not tied to it — every block beyond
@@ -69,18 +69,49 @@ not.
 
 | What the card wants | Bambu Lab | OctoPrint | Moonraker / Klipper | Prusa Connect |
 | --- | --- | --- | --- | --- |
-| `entity` (drives the layout) | `sensor.*_current_stage` | `sensor.*_current_state` | `sensor.*_printer_state` | `sensor.*_printer_state` |
-| Progress | `sensor.*_print_progress` | `sensor.*_job_percentage` | `sensor.*_progress` | `sensor.*_progress` |
-| Remaining | `sensor.*_remaining_time` | `sensor.*_time_remaining` | `sensor.*_print_time_left` | `sensor.*_remaining` |
-| Job name | `sensor.*_task_name` | `sensor.*_current_file` | `sensor.*_filename` | `sensor.*_filename` |
-| Nozzle | `sensor.*_nozzle_temperature` | `sensor.*_tool0_temperature` | `sensor.*_extruder_temperature` | `sensor.*_nozzle_temperature` |
-| Bed | `sensor.*_bed_temperature` | `sensor.*_bed_temperature` | `sensor.*_heater_bed_temperature` | `sensor.*_bed_temperature` |
-| Camera | `image.*_camera` | `camera.*` | `camera.*` | — |
+| `entity` (drives the layout) | **print status** | `sensor.*_current_state` | `sensor.*_printer_state` | `sensor.*_printer_state` |
+| `stage_entity` (the wording) | current stage | — | — | — |
+| Progress | print progress | `sensor.*_job_percentage` | `sensor.*_progress` | `sensor.*_progress` |
+| Remaining | remaining time | `sensor.*_time_remaining` | `sensor.*_print_time_left` | `sensor.*_remaining` |
+| Job name | subtask name | `sensor.*_current_file` | `sensor.*_filename` | `sensor.*_filename` |
+| Nozzle | nozzle temp / target nozzle temp | `sensor.*_tool0_temperature` | `sensor.*_extruder_temperature` | `sensor.*_nozzle_temperature` |
+| Bed | bed temp / target bed temp | `sensor.*_bed_temperature` | `sensor.*_heater_bed_temperature` | `sensor.*_bed_temperature` |
+| Camera | `camera.*` (the chamber) | `camera.*` | `camera.*` | — |
 | Speed profile | `select.*_printing_speed` | — | — | — |
-| AMS | `sensor.*_tray_1_*` … | — | — | — |
+| AMS | one sensor per slot | — | — | — |
+
+**Why the Bambu column has no entity ids in it.** Home Assistant creates an
+entity id in the language the install was set up in, so the same P1S is
+`sensor.*_print_progress` on an English system and
+`sensor.*_druckfortschritt` on a German one. Nothing matched on the id would
+survive that, which is why the registry's translation key is the first pass and
+the id only the second. Pick the entity by what it *is* — the table names that
+— and the card finds the rest itself.
+
+**Use the print status, not the stage, as `entity`.** Bambu publishes both. The
+status is a clean six-value enum (`running`, `pause`, `finish`, `idle`,
+`failed`, `offline`); the stage is a list of eighty values describing what the
+machine is physically doing this second — `waiting_for_heatbed_temperature`,
+`cleaning_nozzle_tip`, `checking_extruder_temperature`. The substring rules
+catch most of those, but "most" is not what should decide whether the progress
+bar is on screen. The stage is found on its own and used for the status line,
+where eighty values are an asset rather than a hazard.
 
 OctoPrint sets no translation keys, so its temperatures are found by device
 class instead — that third pass exists for exactly this case.
+
+## AMS trays
+
+Bambu does not publish a tray as three entities. It publishes **one sensor per
+slot**, whose state is the spool's product name and whose attributes carry
+`type`, `color`, `remain` and `empty`. The card reads either shape: dedicated
+entities where an integration splits them, the tray entity's own attributes
+where it does not — so `ams_slots` usually needs nothing at all, and naming
+only `type_entity` is enough when everything hangs off that one entity.
+
+A spool that cannot report how much is left reports `-1`, which is shown as no
+bar rather than as an empty one. Two AMS units stay two rows of four; they both
+number their slots 1–4, and merging them would quietly hide half the filament.
 
 ## Options
 
@@ -101,7 +132,7 @@ class instead — that third pass exists for exactly this case.
 | `show_progress`, `show_temps`, `show_speed`, `show_ams`, `show_details` | boolean | `true` | The blocks. Each also disappears on its own when its entities are missing. |
 | `details_default_open` | boolean | `false` | Whether the drawer starts open. |
 | `filament_warn` | number | `40` | Percent below which a tray's bar turns amber. |
-| `ams_slots` | list | discovered | Per tray: `type_entity`, `color_entity`, `remaining_entity`. |
+| `ams_slots` | list | discovered | Per tray: `type_entity`, `color_entity`, `remaining_entity`. One entity carrying all three as attributes also works — see below. |
 | `accessories` | list | — | Switches beside the printer: `entity`, `name`, `icon`, `color`, `power_entity`. |
 | `nozzle_temp_entity`, `nozzle_target_entity`, `bed_temp_entity`, `bed_target_entity`, `chamber_temp_entity`, `speed_entity`, `start_time_entity`, `end_time_entity`, `power_entity`, `camera_entity`, `light_entity` | string | discovered | Override any lookup that got it wrong. |
 | `accent_color`, `text_color`, `card_background`, `glass_background`, `radius`, `corners`, `card_version` | — | — | The usual shared appearance options. |
