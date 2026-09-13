@@ -8,6 +8,91 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ### Added
 
+- **A new card: `m3-vacuum-card`.** A robot vacuum arrives in Home Assistant as
+  one `vacuum` entity and two dozen sensors, and the native tile shows the first
+  of them. This card is the machine instead: where it is, what it is doing, what
+  it is doing it to, and the four or five things anybody actually presses.
+
+  **The layout follows the state.** Cleaning shows the job and a pause; docked
+  shows the battery and what it last cleaned; an error shows the error and stops
+  pretending the rest is useful.
+
+  **Every command is optimistic, because it has to be.** The Roborock
+  integration polls every thirty seconds and pushes nothing, so a tap on Start
+  changes nothing visible for up to half a minute — which reads as a broken
+  button, not a slow one. The card paints the state it asked for and drops the
+  guess when the real one arrives, or when it expires. An error or a
+  disconnection overrides a standing guess at once: that is the one thing a user
+  must not be kept from seeing for the sake of a smooth animation.
+
+  **Rooms are chips**, built from the `area` selector of `vacuum.clean_area` and
+  offered only when the vacuum's `supported_features` actually carries the bit
+  for it — a card that offers a button the machine cannot honour is worse than
+  one that offers nothing. **Suction and mop** get M3 Expressive discrete
+  sliders: a thick track with a gap either side of the handle, stop indicators,
+  and a handle that widens under the finger.
+
+  **The dock is a second device.** Roborock registers it separately, with
+  `via_device_id` and `parent_device_id` both null, tied to the vacuum only by
+  the identifier `roborock:<duid>_dock`. Discovery walks it too. Without that the
+  card loses the water tanks, dust emptying, mop washing, the dock's own error
+  and the child lock — everything the station knows about itself.
+
+  It is **not tied to Roborock.** Entities are matched on the registry's
+  translation key first, the entity id second, a device class third, so a vendor
+  that names things differently still lands in the right blocks; and every one of
+  them can be overridden in the editor when the guess is wrong.
+
+- **A new card: `m3-vacuum-maintenance-card`.** The other half of a robot
+  vacuum: filters, brushes, sensors and the mop, each with the life the vendor
+  thinks it has left and a bar that goes amber before anything is urgent. Dock
+  counters, cleaning totals and the station's own consumables sit alongside,
+  because they are the same kind of question.
+
+  **And reminders for the chores nothing counts.** "Change the mop every three
+  runs" is not a sensor — no integration tracks it, and the vacuum has no idea
+  it happened. Give the card a number of runs or hours and it works out when the
+  job is due, shows it as a chip on the card, and can be ticked off there.
+  With an `input_number` helper it counts "runs since" properly; without one it
+  simply speaks up on every multiple, which is enough for a mop.
+
+  Both cards can build **real Home Assistant automations from the editor** — a
+  part below its warning threshold, a reminder coming due, an error on the
+  vacuum or on its dock — instead of leaving the reader to wire that up
+  themselves.
+
+- **A new card: `m3-printer-card`.** A 3D printer spends most of its life idle,
+  and a dashboard built from one tile per sensor spends most of its life saying
+  "unavailable" sixteen times. Here the state decides what is drawn: a printing
+  machine shows its job, progress, layer count and temperatures; an idle one
+  drops all of that; an offline one shows almost nothing.
+
+  **Except the socket.** Accessories — the plug it hangs on, an AMS heater, a
+  filament dryer — live in the details drawer, and that block stays lit while
+  everything else dims. Every other control is hidden when the machine is
+  unreachable because nothing sent would arrive; the socket is how it comes
+  back, and dimming it would make the one thing that still works look like the
+  things that do not.
+
+  **`state_map` is why it is not a Bambu card.** Bambu reports a stage with
+  eighty values, OctoPrint `Printing`/`Operational`, Moonraker Klipper's
+  vocabulary, Prusa Connect something else again. The card resolves a status in
+  three passes — your own map first, then a table of values seen in the wild,
+  then substring rules — and anything nothing recognises reads as *idle*, never
+  as an error. A vague status line is better than a red frame around a healthy
+  machine.
+
+  **The camera is a still, not a stream,** and says so on the badge. A printer's
+  camera runs on the printer's own CPU and bandwidth, and a dashboard left open
+  on a wall tablet would hold a stream open for hours. It refreshes every ten
+  seconds and only while the card is on screen; a layer takes longer than that
+  anyway. `camera_live: true` opts in.
+
+  **AMS trays read either shape.** Some integrations publish three entities per
+  tray; Bambu publishes one whose attributes carry the type, the colour and how
+  much is left. Both work, and a spool that cannot report its level shows no bar
+  rather than an empty one.
+
 - **A compact mode for the light card**, via `compact: true`. It drops the power
   button and makes the header icon the toggle instead — the split the native
   tile card makes, where the icon is the control and the rest of the header
@@ -246,6 +331,27 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ### Changed
 
+- **The aquarium card's schedule bar is rebuilt in the Expressive shape.** It
+  was an SVG that drew the day as one filled strip; it is now the same geometry
+  as the suite's discrete slider — thick track, real gaps either side of each
+  handle, stop indicators — so the aquarium's day and the vacuum's suction scale
+  read as the same control rather than two designs that happen to sit in one
+  suite. The gap is cut with `mask-image` instead of a second background, which
+  is what lets it stay a gap over a gradient.
+
+- **A chip button for a stateless domain no longer prints a state.** A scene, a
+  script or a button has no state worth showing — `scene.abend` reads as a
+  timestamp, `script.x` as "off" — and the chip spent a line on it anyway.
+  Those domains now hide it by default; `show_state: true` brings it back for
+  anyone who wants the timestamp.
+
+- **The vacuum cards use the suite's own header and fold chevron.** Both were
+  hand-rolled copies: a header that was nearly `renderCardHeader` and a chevron
+  that was nearly the heading card's. Nearly is how a suite stops looking like
+  one thing. The chevron moved into `shared/fold-arrow.ts` — a 26px tinted
+  square that becomes a circle when the card is folded — so the next card that
+  folds inherits it instead of drawing a fourth version.
+
 - **The shared popup chrome takes an optional title and size.** It was a bare
   close-button strip at one fixed width, which is all the popups that existed
   needed. With a title it becomes a real header row, and `wide`/`fullscreen`
@@ -275,6 +381,96 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   `config_entry_id` on a dashboard with more than one NAS.
 
 ### Hinzugefügt
+
+- **Eine neue Karte: `m3-vacuum-card`.** Ein Saugroboter kommt in Home Assistant
+  als eine `vacuum`-Entität und zwei Dutzend Sensoren an, und die native Kachel
+  zeigt den ersten davon. Diese Karte zeigt stattdessen das Gerät: wo es ist, was
+  es tut, womit, und die vier oder fünf Dinge, die man tatsächlich drückt.
+
+  **Das Layout folgt dem Zustand.** Beim Saugen stehen Auftrag und Pause da;
+  in der Station Akkustand und was zuletzt gereinigt wurde; bei einem Fehler der
+  Fehler — und der Rest hört auf, so zu tun, als sei er jetzt nützlich.
+
+  **Jeder Befehl wird optimistisch gezeichnet, und das muss er auch.** Die
+  Roborock-Integration fragt alle dreißig Sekunden nach und schickt von sich aus
+  nichts. Ein Druck auf Start ändert also bis zu eine halbe Minute lang nichts
+  Sichtbares — das liest sich als kaputter Knopf, nicht als langsamer. Die Karte
+  malt den Zustand, den sie angefordert hat, und lässt die Annahme fallen, sobald
+  der echte eintrifft oder die Frist abläuft. Ein Fehler oder ein Verbindungs-
+  abbruch schlägt die Annahme sofort: das ist das eine, was man niemandem einer
+  hübschen Animation zuliebe vorenthalten darf.
+
+  **Räume sind Chips**, gebaut aus dem `area`-Selektor von `vacuum.clean_area` —
+  und nur dann angeboten, wenn die `supported_features` des Saugers das
+  entsprechende Bit wirklich führen. Eine Karte, die einen Knopf anbietet, den
+  das Gerät nicht bedienen kann, ist schlimmer als eine, die gar keinen anbietet.
+  **Saugstufe und Wischmenge** bekommen Regler im Material-3-Expressive-Stil:
+  dicke Bahn, echte Lücken beidseits des Griffs, Haltepunkte, und ein Griff, der
+  unter dem Finger breiter wird.
+
+  **Die Station ist ein zweites Gerät.** Roborock meldet sie getrennt an,
+  `via_device_id` und `parent_device_id` beide leer, mit dem Sauger nur über die
+  Kennung `roborock:<duid>_dock` verbunden. Die Erkennung läuft deshalb auch über
+  sie. Ohne das fehlen der Karte Frisch- und Schmutzwassertank, Staubentleerung,
+  Moppwäsche, der eigene Fehler der Station und die Kindersicherung.
+
+  Sie ist **nicht auf Roborock festgelegt.** Entitäten werden zuerst über den
+  Übersetzungsschlüssel der Registry gesucht, dann über die Entitäts-ID, zuletzt
+  über die Geräteklasse — ein Hersteller, der anders benennt, landet also
+  trotzdem in den richtigen Blöcken. Und jede einzelne lässt sich im Editor
+  überschreiben, wenn die Vermutung danebenliegt.
+
+- **Eine neue Karte: `m3-vacuum-maintenance-card`.** Die andere Hälfte eines
+  Saugroboters: Filter, Bürsten, Sensoren und Wischmopp, jeweils mit der
+  Restlaufzeit, die der Hersteller ihnen zutraut, und einem Balken, der bernstein
+  wird, bevor irgendetwas dringend ist. Daneben die Zähler der Station,
+  Gesamtsummen und deren eigene Verschleißteile — es ist dieselbe Art Frage.
+
+  **Und Erinnerungen für die Aufgaben, die niemand zählt.** „Alle drei Fahrten
+  den Wischmopp wechseln" ist kein Sensor: keine Integration führt darüber Buch,
+  und der Sauger weiß nicht, dass es passiert ist. Man gibt der Karte eine Zahl
+  von Fahrten oder Stunden, sie rechnet aus, wann es fällig ist, zeigt es als
+  Chip auf der Karte und lässt es dort abhaken. Mit einem `input_number`-Helfer
+  zählt sie „seit N Fahrten" sauber mit; ohne einen meldet sie sich schlicht bei
+  jedem Vielfachen, was für einen Mopp reicht.
+
+  Beide Karten können **echte Automationen aus dem Editor heraus anlegen** — ein
+  Teil unter der Warnschwelle, eine fällige Erinnerung, ein Fehler am Sauger oder
+  an der Station — statt das der Leserin selbst zu überlassen.
+
+- **Eine neue Karte: `m3-printer-card`.** Ein 3D-Drucker steht die meiste Zeit
+  still, und ein Dashboard aus einer Kachel pro Sensor sagt die meiste Zeit
+  sechzehnmal „nicht verfügbar". Hier entscheidet der Zustand, was gezeichnet
+  wird: ein druckendes Gerät zeigt Auftrag, Fortschritt, Schichten und
+  Temperaturen; ein bereites lässt das alles weg; ein offline gegangenes fast
+  alles.
+
+  **Bis auf die Steckdose.** Zubehör — die Dose, an der er hängt, eine
+  AMS-Heizung, ein Filamenttrockner — liegt im Detailbereich, und der bleibt
+  hell, während alles andere abdunkelt. Jede andere Bedienung verschwindet, wenn
+  die Maschine nicht erreichbar ist, weil ohnehin nichts ankäme; die Steckdose
+  ist der Weg zurück. Sie mit abzudunkeln hieße, das Einzige, was noch
+  funktioniert, wie das Kaputte aussehen zu lassen.
+
+  **`state_map` ist der Grund, warum es keine Bambu-Karte ist.** Bambu meldet
+  einen Arbeitsschritt mit achtzig Werten, OctoPrint `Printing`/`Operational`,
+  Moonraker das Vokabular von Klipper, Prusa Connect wieder etwas anderes. Die
+  Karte löst den Status in drei Durchgängen auf — deine eigene Zuordnung zuerst,
+  dann eine Tabelle bekannter Werte, dann Teilstring-Regeln — und was niemand
+  erkennt, gilt als *bereit*, niemals als Fehler. Eine vage Statuszeile ist
+  besser als ein roter Rahmen um eine gesunde Maschine.
+
+  **Die Kamera ist ein Standbild, kein Stream** — und sagt das auch auf dem
+  Abzeichen. Die Kamera eines Druckers läuft auf dessen eigener Rechenzeit und
+  Bandbreite, und ein Dashboard, das auf einem Wandtablet offen liegt, hielte
+  einen Stream stundenlang offen. Sie frischt alle zehn Sekunden auf, und nur
+  solange die Karte sichtbar ist; eine Schicht dauert ohnehin länger.
+  `camera_live: true` schaltet um.
+
+  **AMS-Fächer werden in beiden Formen gelesen.** Manche Integrationen
+  veröffentlichen drei Entitäten pro Fach; Bambu veröffentlicht eine, deren
+  Attribute Typ, Farbe und Restmenge tragen. Beides funktioniert, und eine Spule,
+  die ihren Füllstand nicht melden kann, bekommt keinen Balken statt eines leeren.
 
 - **Ein Kompaktmodus für die Lichtkarte**, über `compact: true`. Er lässt den
   Ein/Aus-Knopf weg und macht stattdessen das Symbol in der Kopfzeile zum
@@ -516,6 +712,29 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   keine andere Aktion.
 
 ### Geändert
+
+- **Der Zeitplanbalken der Aquarium-Karte ist im Expressive-Stil neu gebaut.** Er
+  war ein SVG, das den Tag als einen gefüllten Streifen zeichnete; jetzt ist es
+  dieselbe Geometrie wie beim Regler der Suite — dicke Bahn, echte Lücken
+  beidseits jedes Griffs, Haltepunkte. Der Tag im Aquarium und die Saugstufe
+  lesen sich damit als dasselbe Bedienelement und nicht als zwei Entwürfe, die
+  zufällig in derselben Sammlung liegen. Die Lücke wird mit `mask-image`
+  ausgeschnitten statt mit einem zweiten Hintergrund — nur so bleibt sie auch
+  über einem Verlauf eine Lücke.
+
+- **Ein Chip-Knopf einer zustandslosen Domäne schreibt keinen Zustand mehr hin.**
+  Eine Szene, ein Skript oder ein Button hat keinen Zustand, der etwas aussagt —
+  `scene.abend` liest sich als Zeitstempel, `script.x` als „aus" — und der Chip
+  hat trotzdem eine Zeile dafür verbraucht. Diese Domänen blenden ihn jetzt
+  standardmäßig aus; `show_state: true` holt ihn zurück.
+
+- **Die Saugerkarten benutzen die Kopfzeile und den Falt-Pfeil der Suite.** Beide
+  waren handgemachte Kopien: eine Kopfzeile, die fast `renderCardHeader` war, und
+  ein Pfeil, der fast der der Überschriftenkarte war. „Fast" ist die Art, wie
+  eine Sammlung aufhört, wie eine auszusehen. Der Pfeil liegt jetzt in
+  `shared/fold-arrow.ts` — ein 26px großes, getöntes Quadrat, das zum Kreis wird,
+  wenn die Karte zugeklappt ist — sodass die nächste faltbare Karte ihn erbt,
+  statt eine vierte Fassung zu zeichnen.
 
 - **Das gemeinsame Popup-Gerüst nimmt optional Titel und Größe entgegen.** Es
   war eine blanke Leiste mit Schließen-Knopf in einer festen Breite — mehr
