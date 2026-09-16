@@ -93,6 +93,13 @@ The suite registers 44 cards.
   hand-rolled copies. The chevron now lives in one place, so the next card that
   folds inherits it.
 
+### Fixed
+
+- **Closing a card's dialog no longer scrolls the dashboard away.** It jumped to
+  whatever had focus last — on a phone, often a slider tapped minutes earlier —
+  because a tap on a card's header does not move focus there. The card now takes
+  focus before it opens a dialog, so closing it leaves you where you were.
+
 ### Behaviour changes
 
 - **The aquarium card's schedule bar is redrawn.** Same data, same behaviour —

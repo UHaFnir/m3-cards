@@ -387,6 +387,22 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   card uses, which also means the Glances volume list finally honours
   `config_entry_id` on a dashboard with more than one NAS.
 
+### Fixed
+
+- **Closing a dialog threw the dashboard back up the page.** Open a card's
+  details, close them, and the view scrolled — on the test dashboard, 4,318px
+  up to a light card three sections higher. A dialog hands focus back on close
+  to whatever had it when it opened, and the browser scrolls that element into
+  view. On a phone a tap on a card's header does not move focus, so focus was
+  still wherever it had last been left: a slider tapped minutes earlier.
+
+  The card that opens a dialog now takes focus first, without scrolling, so the
+  dialog returns focus to where the user already is. It is one capture listener
+  for every more-info an `m3-` card fires — 32 cards — and the same step before
+  the suite's own `<dialog>`s. Focus already inside the card is left alone: a
+  keyboard user who pressed Enter on a control gets focus back on that control.
+  Home Assistant's own cards on the same dashboard are not touched.
+
 ## [2.3.2]
 
 Editor tidying for the nav card, following 2.3.1.

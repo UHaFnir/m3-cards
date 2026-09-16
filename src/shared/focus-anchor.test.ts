@@ -1,0 +1,85 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { anchorFocus, installFocusAnchor, isInside } from "./focus-anchor";
+
+// No DOM in this test run, so nodes are plain objects with the few properties
+// the module walks: parentNode, and host on a shadow root.
+
+afterEach(() => vi.unstubAllGlobals());
+
+function tree() {
+  const body = { parentNode: null } as unknown as Node;
+  const card = { parentNode: body, tagName: "M3-VACUUM-CARD" } as unknown as Node;
+  const shadow = { parentNode: null, host: card } as unknown as Node;
+  const header = { parentNode: shadow } as unknown as Node;
+  const elsewhere = { parentNode: body } as unknown as Node;
+  return { body, card, shadow, header, elsewhere };
+}
+
+describe("isInside", () => {
+  it("climbs out of a shadow root to its host", () => {
+    const { card, header } = tree();
+    expect(isInside(card, header)).toBe(true);
+  });
+
+  it("is false for something elsewhere on the page", () => {
+    const { card, elsewhere } = tree();
+    expect(isInside(card, elsewhere)).toBe(false);
+  });
+
+  it("is false for nothing", () => {
+    const { card } = tree();
+    expect(isInside(card, null)).toBe(false);
+  });
+});
+
+function fakeCard(parent: Node) {
+  const attrs = new Map<string, string>();
+  return {
+    parentNode: parent,
+    tagName: "M3-VACUUM-CARD",
+    ownerDocument: { body: null },
+    hasAttribute: (k: string) => attrs.has(k),
+    setAttribute: (k: string, v: string) => attrs.set(k, v),
+    getAttribute: (k: string) => attrs.get(k),
+    focus: vi.fn(),
+  };
+}
+
+describe("anchorFocus", () => {
+  it("moves stray focus onto the card, without scrolling", () => {
+    // The reported bug: focus left on a light card's slider elsewhere on the
+    // page, so closing the vacuum's dialog scrolled back up to the slider.
+    const body = { parentNode: null } as unknown as Node;
+    const slider = { parentNode: body } as unknown as Element;
+    vi.stubGlobal("document", { activeElement: slider });
+    const card = fakeCard(body);
+    anchorFocus(card as unknown as HTMLElement);
+    expect(card.focus).toHaveBeenCalledWith({ preventScroll: true });
+    // Focusable by script only — the card must not join the tab order.
+    expect(card.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("leaves focus alone when it is already inside the card", () => {
+    // A keyboard user who tabbed to the header and pressed Enter: the dialog
+    // should give focus back to the header, not to the card around it.
+    const body = { parentNode: null } as unknown as Node;
+    const card = fakeCard(body);
+    const shadow = { parentNode: null, host: card } as unknown as Node;
+    const header = { parentNode: shadow, shadowRoot: null } as unknown as Element;
+    vi.stubGlobal("document", { activeElement: header });
+    anchorFocus(card as unknown as HTMLElement);
+    expect(card.focus).not.toHaveBeenCalled();
+  });
+});
+
+describe("installFocusAnchor", () => {
+  it("registers its listener once, however often the bundle runs it", () => {
+    const addEventListener = vi.fn();
+    const win = { addEventListener } as unknown as Window;
+    installFocusAnchor(win);
+    installFocusAnchor(win);
+    expect(addEventListener).toHaveBeenCalledOnce();
+    expect(addEventListener.mock.calls[0][0]).toBe("hass-more-info");
+    expect(addEventListener.mock.calls[0][2]).toEqual({ capture: true });
+  });
+});

@@ -1,3 +1,9 @@
+import { installFocusAnchor } from "./shared/focus-anchor";
+
+// Before any card registers: closing a more-info dialog should not throw the
+// dashboard back to whatever was focused last. See shared/focus-anchor.ts.
+installFocusAnchor();
+
 export * from "./m3-climate-card";
 export * from "./m3-climate-card-mini";
 export * from "./m3-button-card";

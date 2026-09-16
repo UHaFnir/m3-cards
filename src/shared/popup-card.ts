@@ -1,5 +1,6 @@
 import { html, css, nothing, type TemplateResult } from "lit";
 import type { PopupSize } from "../types";
+import { anchorFocus } from "./focus-anchor";
 
 // A card-defined popup: holding a tile opens a `<dialog>` containing another
 // instance of the *same* card, re-scoped to just that tile (e.g. one room's
@@ -51,7 +52,13 @@ export function syncPopupCardElement<Config>(params: {
 // if called while already in that state, hence the guards.
 export function syncDialogOpenState(dialog: HTMLDialogElement | null | undefined, open: boolean): void {
   if (!dialog) return;
-  if (open && !dialog.open) dialog.showModal();
+  if (open && !dialog.open) {
+    // A <dialog> returns focus on close to whatever had it when it opened, and
+    // scrolls it into view. Parked on the card first, that is where the user is.
+    const host = (dialog.getRootNode?.() as ShadowRoot | undefined)?.host as HTMLElement | undefined;
+    if (host) anchorFocus(host);
+    dialog.showModal();
+  }
   if (!open && dialog.open) dialog.close();
 }
 
