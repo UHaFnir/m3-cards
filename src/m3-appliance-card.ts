@@ -97,6 +97,7 @@ import {
 import { buildWavePath, lerpStep } from "./shared/wave";
 import {
   buildCssVars,
+  foregroundColor,
   foregroundOn,
   inkOn,
   resolveCommonColors,
@@ -1159,6 +1160,9 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
       "m3a-chip": color,
       "m3a-chip-tint": tint,
       "m3a-chip-fg": foregroundOn(color, tint, 4.5, this),
+      // An information chip has no fill, so its text sits on the card itself —
+      // checked against that, not against a tint that is no longer drawn.
+      "m3a-chip-text": foregroundColor(this, color),
       "m3a-chip-ink": inkOn(color, this),
     });
     const body = html`${icon ? html`<ha-icon icon=${icon}></ha-icon>` : nothing}<span>${text}</span>`;
@@ -1535,22 +1539,30 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
       gap: ${APPLIANCE_CHIP_GAP}px;
     }
 
+    /* Filled means it can be pressed; outlined means it is telling you
+       something — the rule the vacuum and printer cards follow. The action
+       buttons above are filled, and these chips used to be filled pills too, so
+       "Power 0 W" looked exactly as pressable as "Identify". An information chip
+       now has a rim in its own colour and no fill; a chip with a tap_action is a
+       control and stays filled. */
     .chip {
+      box-sizing: border-box;
       display: inline-flex;
       align-items: center;
       gap: 6px;
       height: ${APPLIANCE_CHIP_HEIGHT}px;
       padding: 0 12px;
-      border: none;
+      border: 1px solid color-mix(in srgb, var(--m3a-chip, var(--m3p-secondary-text)) 40%, transparent);
       border-radius: ${APPLIANCE_CHIP_RADIUS}px;
       font-family: inherit;
       font-size: 12px;
-      font-weight: 600;
-      color: var(--m3a-chip-fg, var(--m3p-secondary-text));
-      background: var(--m3a-chip-tint, color-mix(in srgb, var(--m3p-secondary-text) 8%, transparent));
+      font-weight: 500;
+      color: var(--m3a-chip-text, var(--m3p-secondary-text));
+      background: transparent;
       transition:
         border-radius 0.35s ${EASING},
         background 0.35s ${EASING},
+        border-color 0.35s ${EASING},
         color 0.35s ${EASING};
     }
 
@@ -1562,6 +1574,10 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
 
     .chip.control {
       cursor: pointer;
+      border-color: transparent;
+      font-weight: 600;
+      color: var(--m3a-chip-fg, var(--m3p-secondary-text));
+      background: var(--m3a-chip-tint, color-mix(in srgb, var(--m3p-secondary-text) 8%, transparent));
     }
 
     .chip.control.active {

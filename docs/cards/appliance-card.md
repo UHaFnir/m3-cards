@@ -43,7 +43,7 @@ Everything else is a block you add.
 | `sliders` | One labelled slider per `number` / `input_number` entity, over the entity's own `min`/`max`/`step` |
 | `selects` | One row of pills per `select` / `input_select` entity, from the entity's `options` |
 | `buttons` | A row of action buttons — press, start, stop, toggle |
-| `chips` | Small coloured pills at the bottom: door open, power draw, filter status |
+| `chips` | Small readings at the bottom: door open, power draw, filter status. Drawn with a rim and no fill, so they cannot be mistaken for the filled `buttons`; a chip with a `tap_action` is a control and is filled like one. |
 
 `layout` sets both the order and what appears at all. Leaving a block out of
 the list hides it — one mechanism rather than an array plus a set of `show_*`
