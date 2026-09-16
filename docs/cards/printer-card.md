@@ -171,6 +171,23 @@ start_action:
   perform_action: script.print_last_job
 ```
 
+## Progress, drawn as the light card draws brightness
+
+The progress bar is the light card's wave, not a lookalike: the same amplitude,
+wavelength, stroke and gap, flowing while the printer prints and flattening when
+it pauses — the shape says "stopped" before the word does. It is drawn at the
+card's real width. It used to be a 100-unit drawing stretched to fit, which
+turned a tight wave into a long, lazy swell on a phone.
+
+The header ends the way the vacuum card's does — a pill, then the fold chevron —
+with the percentage in the pill. The layer and the time left sit under the wave
+instead, left and right, where they describe the thing they are under; up in the
+header they pushed the stage wording off the end of the line.
+
+**Filled means press it, outlined means read it.** The chips in the details
+block are status and have a rim and no fill; the accessory rows under them are
+switches and are filled. The vacuum cards follow the same rule.
+
 ## Pause, resume and stop work without configuration
 
 Bambu Lab publishes a button entity for each — pause, resume, stop — with a
@@ -197,8 +214,8 @@ on a phone had no label to say what either was for.
 
 `collapsible: true` puts the suite's fold chevron at the end of the header, the
 same one the vacuum cards use, and a tap folds the card down to its header and
-controls. The header still carries the percentage and the remaining time while
-a job runs, so a folded card still answers "how far along is it".
+controls. The header still carries the percentage in its pill while a job runs,
+so a folded card still answers "how far along is it".
 
 `collapse_blocks` narrows what the fold takes — keep the AMS trays in view while
 the camera folds, say:

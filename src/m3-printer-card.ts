@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing, unsafeCSS, type PropertyValues } from "lit";
+import { LitElement, html, svg, css, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HaActionConfig,
@@ -52,6 +52,10 @@ import {
   PRINTER_WAVE_STROKE,
   PRINTER_WAVE_SVG_HEIGHT,
   PRINTER_WAVE_WAVELENGTH,
+  PRINTER_WAVE_PHASE_SPEED,
+  PRINTER_WAVE_AMPLITUDE_LERP,
+  PRINTER_PROGRESS_PILL_HEIGHT,
+  PRINTER_PROGRESS_PILL_RADIUS,
   PRINTER_ACCESSORY_HEIGHT,
   PRINTER_ACCESSORY_ICON,
   PRINTER_ACCESSORY_ICON_RADIUS,
@@ -61,7 +65,7 @@ import {
   PRINTER_DETAIL_CHIP_RADIUS,
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
-import { STANDARD_EASING } from "./shared/animation";
+import { STANDARD_EASING, isReducedMotion } from "./shared/animation";
 import { runHaAction, isActionable } from "./shared/actions";
 import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { inkOn, resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
@@ -122,6 +126,26 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     this._cameraTick++;
   });
 
+  // ---- the progress wave's own animation state -------------------------------
+  //
+  // Kept out of Lit's reactive state on purpose. The wave moves every frame, and
+  // a reactive write per frame is sixty renders a second of a card that has not
+  // changed; the frame callback writes one path attribute instead, the way the
+  // light card's slider does.
+  /** Measured in real pixels; the only piece of this that renders. */
+  @state() private _waveWidth = 0;
+  private _waveObserver?: ResizeObserver;
+  private _waveObserved?: Element;
+  private _wavePhase = 0;
+  /** What is painted, easing towards `_waveTarget`. */
+  private _waveAmplitude = PRINTER_WAVE_AMPLITUDE;
+  /** Full height while printing, flat while paused. */
+  private _waveTarget = PRINTER_WAVE_AMPLITUDE;
+  private _waveDrawn = false;
+  private _waveGeom?: { end: number; mid: number };
+  private _waveTicker = new VisibleTicker(this, () => this._tickWave());
+  private _waveTicking = false;
+
   private _optimistic = new OptimisticState<PrinterState>({
     ttlMs: PRINTER_OPTIMISTIC_MS,
     // An error or a disconnect always wins: those are the two a user must not
@@ -176,6 +200,9 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     this._ticker.disconnect();
     this._optimistic.clear();
     this._confirm = undefined;
+    this._setWaveTicking(false);
+    this._waveObserver?.disconnect();
+    this._waveObserved = undefined;
   }
 
   /**
@@ -187,6 +214,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       this.renderRoot.querySelector("dialog.m3-confirm") as HTMLDialogElement | null,
       this._confirm !== undefined,
     );
+    this._syncWave();
     if (!this._config?.collapsible) return;
     // An entity-backed fold can be changed from another dashboard or by an
     // automation, so it is re-read rather than only written on a tap.
@@ -544,27 +572,156 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     const percent = this._numeric(this._entity("progress_entity", "progress"));
     if (percent === undefined) return nothing;
 
-    const clamped = Math.max(0, Math.min(100, percent));
-    const width = 100;
-    const mid = PRINTER_WAVE_SVG_HEIGHT / 2;
-    const filled = (clamped / 100) * width;
     // The wave flattens when paused: the shape says "stopped" before the word
     // does, and a wave that keeps rolling on a paused printer is a lie.
-    const amplitude = state === "paused" ? 0 : PRINTER_WAVE_AMPLITUDE;
-    const path = buildWavePath(0, Math.max(0, filled - PRINTER_WAVE_GAP / 2), amplitude, PRINTER_WAVE_WAVELENGTH, 0, mid);
+    this._waveTarget = state === "paused" ? 0 : PRINTER_WAVE_AMPLITUDE;
+    // The first paint takes the target at once. Easing there would make a card
+    // that loads on a paused printer visibly settle, for no reason anyone asked.
+    if (!this._waveDrawn || isReducedMotion()) this._waveAmplitude = this._waveTarget;
+
+    const width = this._waveWidth;
+    const height = PRINTER_WAVE_SVG_HEIGHT;
+    const mid = height / 2;
+    const gapHalf = PRINTER_WAVE_GAP / 2;
+    const filledX = (Math.max(0, Math.min(100, percent)) / 100) * width;
+    const end = Math.max(0, filledX - gapHalf);
+    const trackStart = Math.min(width, filledX + gapHalf);
+    const drawWave = width > 0 && end > 1;
+    this._waveGeom = drawWave ? { end, mid } : undefined;
+    if (width > 0) this._waveDrawn = true;
+
+    const caption = this._progressCaption();
 
     return html`
-      <svg class="wave" viewBox=${`0 0 ${width} ${PRINTER_WAVE_SVG_HEIGHT}`} preserveAspectRatio="none">
-        <line
-          class="wave-rest"
-          x1=${Math.min(width, filled + PRINTER_WAVE_GAP / 2)}
-          y1=${mid}
-          x2=${width}
-          y2=${mid}
-        ></line>
-        <path class="wave-fill" d=${path}></path>
-      </svg>
+      <div class="progress">
+        <div class="wave-box">
+          ${width > 0
+            ? html`<svg
+                class="wave"
+                viewBox=${`0 0 ${width} ${height}`}
+                width=${width}
+                height=${height}
+                aria-hidden="true"
+              >
+                ${trackStart < width - 1
+                  ? svg`<line class="wave-rest" x1=${trackStart} y1=${mid} x2=${width} y2=${mid}></line>`
+                  : nothing}
+                ${drawWave
+                  ? svg`<path class="wave-fill" d=${buildWavePath(0, end, this._waveAmplitude, PRINTER_WAVE_WAVELENGTH, this._wavePhase, mid)}></path>`
+                  : nothing}
+              </svg>`
+            : nothing}
+        </div>
+        ${caption}
+      </div>
     `;
+  }
+
+  /**
+   * The two figures that used to crowd the header: the layer on the left, the
+   * time left on the right. Under the wave they describe the thing they sit
+   * under, and the header is left with the stage wording and a percentage pill.
+   */
+  private _progressCaption() {
+    const layer = this._numeric(this._entity("layer_entity", "layer"));
+    const total = this._numeric(this._entity("total_layers_entity", "totalLayers"));
+    const remaining = this._remainingText();
+    if (layer === undefined && !remaining) return nothing;
+
+    const layerText =
+      layer === undefined
+        ? ""
+        : total !== undefined && total > 0
+          ? this._t("printer_layer_of")
+              .replace("{n}", String(Math.round(layer)))
+              .replace("{total}", String(Math.round(total)))
+          : this._t("printer_layer").replace("{n}", String(Math.round(layer)));
+
+    return html`
+      <div class="progress-caption">
+        <span>${layerText}</span>
+        ${remaining
+          ? html`<span class="progress-left">${this._t("printer_remaining_left").replace("{t}", remaining)}</span>`
+          : nothing}
+      </div>
+    `;
+  }
+
+  // ---- the wave's frame loop ----------------------------------------------------
+
+  /**
+   * Starts the frame loop while there is something to move and stops it once
+   * there is not. Called after every render; cheap when nothing changes.
+   */
+  private _syncWave(): void {
+    const box = this.renderRoot.querySelector(".wave-box");
+    if (box && box !== this._waveObserved) {
+      this._waveObserver ??= new ResizeObserver((entries) => {
+        const w = entries[0]?.contentRect.width ?? 0;
+        if (w && Math.abs(w - this._waveWidth) > 0.5) this._waveWidth = w;
+      });
+      if (this._waveObserved) this._waveObserver.unobserve(this._waveObserved);
+      this._waveObserver.observe(box);
+      this._waveObserved = box;
+      // Measured once synchronously as well, so the first frame has a wave in it
+      // rather than an empty box waiting for the observer.
+      const w = box.getBoundingClientRect().width;
+      if (w && Math.abs(w - this._waveWidth) > 0.5) this._waveWidth = w;
+    } else if (!box && this._waveObserved) {
+      this._waveObserver?.unobserve(this._waveObserved);
+      this._waveObserved = undefined;
+      this._waveDrawn = false;
+    }
+
+    const easing = Math.abs(this._waveAmplitude - this._waveTarget) > 0.01;
+    this._setWaveTicking(
+      !!this._waveGeom && !isReducedMotion() && (this._waveTarget > 0 || easing),
+    );
+  }
+
+  private _setWaveTicking(on: boolean): void {
+    if (on === this._waveTicking) return;
+    this._waveTicking = on;
+    if (on) {
+      this._waveTicker.setCadence("frame");
+      this._waveTicker.connect();
+    } else {
+      this._waveTicker.disconnect();
+    }
+  }
+
+  private _tickWave(): void {
+    const geom = this._waveGeom;
+    if (!geom) {
+      this._setWaveTicking(false);
+      return;
+    }
+    let changed = false;
+    const delta = this._waveTarget - this._waveAmplitude;
+    if (Math.abs(delta) > 0.01) {
+      this._waveAmplitude += delta * PRINTER_WAVE_AMPLITUDE_LERP;
+      changed = true;
+    } else if (this._waveAmplitude !== this._waveTarget) {
+      this._waveAmplitude = this._waveTarget;
+      changed = true;
+    }
+    // Only a wave with height flows. A flat line with a moving phase is still a
+    // flat line, and a paused printer should look still.
+    if (this._waveTarget > 0) {
+      this._wavePhase -= PRINTER_WAVE_PHASE_SPEED;
+      changed = true;
+    }
+    if (!changed) {
+      // Settled flat after a pause: nothing left to draw until the state moves.
+      this._setWaveTicking(false);
+      return;
+    }
+    this.renderRoot
+      .querySelector(".wave-fill")
+      ?.setAttribute(
+        "d",
+        buildWavePath(0, geom.end, this._waveAmplitude, PRINTER_WAVE_WAVELENGTH, this._wavePhase, geom.mid),
+      );
   }
 
   // ---- temperatures -----------------------------------------------------------
@@ -965,6 +1122,9 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     // `collapse_blocks` names — or everything. While the printer is offline the
     // details stay whatever the config says, because the socket lives there
     // and it is the only control that can bring the machine back.
+    // Cleared before the blocks draw, so a folded or finished progress block
+    // leaves no geometry behind for the frame loop to keep animating.
+    this._waveGeom = undefined;
     const folded = !!this._config.collapsible && this._folded;
     const pinned: PrinterBlock[] = state === "offline" ? ["details"] : [];
     const hidden = (block: PrinterBlock): boolean =>
@@ -1030,34 +1190,22 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         ? (this.hass?.formatEntityState?.(stageState) ?? stageState.state)
         : this._t(`printer_${state}` as TranslationKey);
 
-    const layer = this._numeric(this._entity("layer_entity", "layer"));
-    const total = this._numeric(this._entity("total_layers_entity", "totalLayers"));
-    let subtitle = stageText;
-    if (running && layer !== undefined) {
-      const layerText =
-        total !== undefined && total > 0
-          ? this._t("printer_layer_of")
-              .replace("{n}", String(Math.round(layer)))
-              .replace("{total}", String(Math.round(total)))
-          : this._t("printer_layer").replace("{n}", String(Math.round(layer)));
-      subtitle = `${stageText} · ${layerText}`;
-    }
+    // The stage wording alone. Layer and time left moved under the wave, where
+    // they describe the thing they sit under; together with the percentage they
+    // pushed the stage off the end of the line on a phone.
+    const subtitle = stageText;
 
     const progress = this._numeric(this._entity("progress_entity", "progress"));
-    const remaining = this._remainingText();
-    // `undefined` rather than `nothing`: the shared header types its trailing
-    // slot as an optional template, and Lit's `nothing` is a symbol.
+    // A pill, as the vacuum card shows its battery. Next to the fold chevron a
+    // loose two-line figure read as crammed; a contained shape does not.
     const readout =
       running && progress !== undefined
         ? html`
-            <div class="progress-readout">
-              <div class="percent">
-                ${formatNumber(this._language, progress, { maximumFractionDigits: 0 })}<span
-                  class="percent-unit"
-                  >%</span
-                >
-              </div>
-              ${remaining ? html`<div class="remaining">${remaining}</div>` : nothing}
+            <div class="progress-pill">
+              ${formatNumber(this._language, progress, { maximumFractionDigits: 0 })}<span
+                class="percent-unit"
+                >%</span
+              >
             </div>
           `
         : nothing;
@@ -1264,28 +1412,27 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         container-type: inline-size;
       }
 
-      .progress-readout {
+      /* The vacuum card's battery pill, holding the percentage instead. */
+      .progress-pill {
         flex: 0 0 auto;
-        text-align: right;
-        line-height: 1.1;
-      }
-
-      .percent {
-        font-size: 22px;
-        font-weight: 700;
+        height: ${unsafeCSS(PRINTER_PROGRESS_PILL_HEIGHT)}px;
+        border-radius: ${unsafeCSS(PRINTER_PROGRESS_PILL_RADIUS)}px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: baseline;
+        justify-content: center;
+        line-height: ${unsafeCSS(PRINTER_PROGRESS_PILL_HEIGHT)}px;
         color: var(--m3pr-accent);
+        background: color-mix(in srgb, var(--m3pr-accent) 14%, transparent);
+        font-size: 14px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
       }
 
       .percent-unit {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         margin-left: 1px;
-      }
-
-      .remaining {
-        font-size: 10px;
-        opacity: 0.55;
-        white-space: nowrap;
       }
 
       .controls {
@@ -1445,11 +1592,33 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         color: #1c1c1c;
       }
 
-      .wave {
-        width: 100%;
+      .progress {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      /* Measured, not stretched: the SVG is drawn at this box's real width. */
+      .wave-box {
         height: ${unsafeCSS(PRINTER_WAVE_SVG_HEIGHT)}px;
+      }
+
+      .wave {
         display: block;
         overflow: visible;
+      }
+
+      .progress-caption {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+      }
+
+      .progress-left {
+        white-space: nowrap;
       }
 
       .wave-fill {
@@ -1684,10 +1853,13 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         }
       }
 
+      /* The gap matches the card's own, so this block's label sits as far from
+         its content as "AMS" and "Speed" do from theirs. It was 6px, which the
+         label's -6px margin cancelled to nothing: the heading sat on the chips. */
       .details {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 12px;
       }
 
       /* The progress figure and the fold chevron share the header's trailing
@@ -1696,43 +1868,48 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       .header-trailing {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
       }
 
       .detail-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 8px;
       }
 
+      /* Status, not controls — so a rim and no fill, the same rule as the
+         vacuum card's chips. The switches underneath are the things to press. */
       .detail-chip {
+        box-sizing: border-box;
         height: ${unsafeCSS(PRINTER_DETAIL_CHIP_HEIGHT)}px;
         border-radius: ${unsafeCSS(PRINTER_DETAIL_CHIP_RADIUS)}px;
-        padding: 0 10px;
+        padding: 0 12px;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
         font-size: 11px;
-        font-weight: 600;
+        font-weight: 500;
         --mdc-icon-size: 14px;
-        background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
         color: var(--m3p-secondary-text, var(--secondary-text-color));
+        background: transparent;
+        border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
       }
 
       .detail-chip.ok {
-        background: color-mix(in srgb, #81c784 14%, transparent);
         color: #81c784;
+        background: color-mix(in srgb, #81c784 6%, transparent);
       }
 
       .detail-chip.error {
-        background: color-mix(in srgb, #e57368 16%, transparent);
         color: #e57368;
+        background: color-mix(in srgb, #e57368 8%, transparent);
+        border-color: color-mix(in srgb, #e57368 45%, transparent);
       }
 
       .accessories {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
       }
 
       .accessory {

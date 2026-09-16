@@ -110,6 +110,11 @@ export class VisibleTicker {
     if (this._cadence === "frame") {
       const step = () => {
         this._onTick(Date.now());
+        // A callback may stop the ticker itself — an animation that has settled
+        // has nothing left to draw. Without this check the next frame would be
+        // scheduled after the stop had already run, and the loop would carry on
+        // with nothing to cancel it.
+        if (!this._running) return;
         this._rafId = requestAnimationFrame(step);
       };
       this._rafId = requestAnimationFrame(step);

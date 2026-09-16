@@ -1174,7 +1174,10 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     }
     if (on(d.binary.mop_attached)) {
       chips.push({
-        icon: "mdi:square-rounded-outline",
+        // Not the empty rounded square it used to be: on a chip that square read
+        // as an unticked checkbox, which invites exactly the tap this chip
+        // cannot take.
+        icon: "mdi:water-outline",
         text: this._t("vacuum_chip_mop_attached"),
         tone: "plain",
       });
@@ -1492,6 +1495,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         opacity: 0.4;
       }
 
+      /* Air between the scales above and the rows of buttons and chips below:
+         two dense pill rows straight under a slider read as one crowded block. */
+      .free-buttons {
+        margin-top: 4px;
+      }
+
       .free-buttons.dimmed {
         opacity: 0.4;
         pointer-events: none;
@@ -1501,30 +1510,41 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         display: flex;
         flex-wrap: wrap;
         gap: ${unsafeCSS(VACUUM_CHIP_GAP)}px;
+        margin-top: 4px;
       }
 
+      /* Filled means it can be pressed; outlined means it is telling you
+         something. The free buttons above are filled pills, and these chips used
+         to be filled pills four pixels shorter — nobody could tell which of the
+         two rows did anything. A status chip now has a rim and no fill, in its
+         own colour, and only a chip that takes a tap is filled. */
       .chip {
+        box-sizing: border-box;
         height: ${unsafeCSS(VACUUM_CHIP_HEIGHT)}px;
         border-radius: ${unsafeCSS(VACUUM_CHIP_RADIUS)}px;
-        padding: 0 10px;
+        padding: 0 12px;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
         font-size: 11px;
-        font-weight: 600;
+        font-weight: 500;
         --mdc-icon-size: 15px;
-        background: color-mix(in srgb, var(--m3p-text, currentColor) 7%, transparent);
         color: var(--m3p-secondary-text, var(--secondary-text-color));
+        background: transparent;
+        border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
       }
 
       .chip.warn {
-        background: color-mix(in srgb, #f0a24a 16%, transparent);
         color: #f0a24a;
+        background: color-mix(in srgb, #f0a24a 6%, transparent);
       }
 
+      /* A reminder that can be ticked off is a button, so it looks like one. */
       .chip.tappable {
-        border: none;
+        border-color: transparent;
+        background: color-mix(in srgb, currentColor 14%, transparent);
         font-family: inherit;
+        font-weight: 600;
         cursor: pointer;
       }
 
@@ -1533,10 +1553,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         opacity: 0.7;
       }
 
-      /* Never collapsed into the overflow, and never quiet. */
+      /* Never collapsed into the overflow, and never quiet — but still a rim,
+         not a fill: an error is information, not something to press. */
       .chip.error {
-        background: color-mix(in srgb, #e57368 18%, transparent);
         color: #e57368;
+        background: color-mix(in srgb, #e57368 8%, transparent);
+        border-color: color-mix(in srgb, #e57368 45%, transparent);
       }
 
       .version {

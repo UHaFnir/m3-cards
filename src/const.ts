@@ -2090,9 +2090,10 @@ export const VACUUM_MOP_RADIUS_ACTIVE = 12;
 export const VACUUM_MOP_TINT = 28;
 
 /** Station chips. */
-export const VACUUM_CHIP_HEIGHT = 30;
-export const VACUUM_CHIP_RADIUS = 15;
-export const VACUUM_CHIP_GAP = 8;
+/** Status chips: kept visibly shorter than the 34px chip buttons beside them. */
+export const VACUUM_CHIP_HEIGHT = 28;
+export const VACUUM_CHIP_RADIUS = 14;
+export const VACUUM_CHIP_GAP = 10;
 export const VACUUM_MAX_CHIPS = 4;
 
 /** Map preview. */
@@ -2247,12 +2248,31 @@ export const PRINTER_ACCESSORY_ICON_RADIUS_ON = 9;
 /** Below this the temperatures stack and the speed pills lose their labels. */
 export const PRINTER_NARROW_PX = 340;
 
-/** Progress wave, matching the appliance and vacuum bars. */
-export const PRINTER_WAVE_STROKE = 6;
-export const PRINTER_WAVE_AMPLITUDE = 2.4;
-export const PRINTER_WAVE_WAVELENGTH = 20;
-export const PRINTER_WAVE_GAP = 8;
-export const PRINTER_WAVE_SVG_HEIGHT = 16;
+/**
+ * Progress wave. The light card's wave, not a lookalike — the same amplitude,
+ * wavelength, stroke, gap and flow — so a print's progress and a lamp's
+ * brightness read as one shape across the suite. It has no handle: a handle
+ * says "drag me", and progress is not something anyone drags.
+ *
+ * It used to be drawn in a 100-unit viewBox stretched to the card's width, so a
+ * 20-unit wavelength became ~80px on a phone: a long, lazy swell instead of a
+ * wave. It is drawn in real pixels now, as the light card's is.
+ */
+export const PRINTER_WAVE_STROKE = LIGHT_WAVE_STROKE;
+export const PRINTER_WAVE_AMPLITUDE = LIGHT_WAVE_AMPLITUDE;
+export const PRINTER_WAVE_WAVELENGTH = LIGHT_WAVE_WAVELENGTH;
+export const PRINTER_WAVE_GAP = LIGHT_WAVE_GAP;
+export const PRINTER_WAVE_PHASE_SPEED = LIGHT_WAVE_PHASE_SPEED;
+export const PRINTER_WAVE_AMPLITUDE_LERP = LIGHT_WAVE_AMPLITUDE_LERP;
+/** Room for the amplitude and the stroke, with a little air either side. */
+export const PRINTER_WAVE_SVG_HEIGHT = 20;
+
+/**
+ * The percentage pill in the header — the vacuum card's battery pill, so the
+ * two cards' headers end the same way: a pill, then the fold chevron.
+ */
+export const PRINTER_PROGRESS_PILL_HEIGHT = VACUUM_BATTERY_HEIGHT;
+export const PRINTER_PROGRESS_PILL_RADIUS = VACUUM_BATTERY_RADIUS;
 
 // ---- confirm dialog ---------------------------------------------------------
 // The shared "are you sure?" sheet. Sized like a small card rather than a
