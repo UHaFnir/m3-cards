@@ -68,7 +68,7 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   drops all of that; an offline one shows almost nothing.
 
   **Except the socket.** Accessories — the plug it hangs on, an AMS heater, a
-  filament dryer — live in the details drawer, and that block stays lit while
+  filament dryer — live in the details block, and that block stays lit while
   everything else dims. Every other control is hidden when the machine is
   unreachable because nothing sent would arrive; the socket is how it comes
   back, and dimming it would make the one thing that still works look like the
