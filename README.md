@@ -4612,7 +4612,7 @@ something.
 | --- | --- | --- | --- |
 | `entity` | string | — | **Required.** The `vacuum` entity. |
 | `name` | string | entity name | Header title. |
-| `icon` | string | follows the state | Overrides the header icon. |
+| `icon` | string | `mdi:robot-vacuum` | Overrides the header icon. By default it stays a robot vacuum — the colour carries the state — and changes only to `robot-vacuum-alert` on an error and `robot-vacuum-off` when the vacuum cannot be reached. |
 | `collapsible` | boolean | `false` | Folds the blocks below the primary buttons. State, battery and Start/Pause stay in view. |
 | `collapse_blocks` | list | all | Which blocks the fold hides: `map`, `rooms`, `fan_speed`, `mop`, `buttons`, `chips`. Left out, it hides all of them. |
 | `default_collapsed` | boolean | `false` | Whether it starts folded. |
@@ -4777,7 +4777,7 @@ everything below the header.
 | --- | --- | --- | --- |
 | `entity` | string | — | **Required.** The `vacuum` entity. Everything else is found from it. |
 | `name` | string | "Maintenance" | Header title. |
-| `icon` | string | `mdi:tools` | Header icon. |
+| `icon` | string | `mdi:robot-vacuum` | Header icon. |
 | `reminders` | list | — | Recurring chores: `name`, optional `icon`, `every_runs` or `every_hours`, optional `counter_entity`. |
 | `consumables` | list | discovered | Replaces the automatic list. Each entry takes `key` or `entity`, plus `name`, `icon`, `max_hours`. |
 | `warn_below` | number | `25` | Percent of service life at which a part turns amber. |

@@ -2129,7 +2129,8 @@ export const VACUUM_WAVE_SVG_HEIGHT = 16;
 // The list half of the vacuum pair. Its rows are the suite's list rows, so the
 // numbers come from the battery and power-list cards rather than a new scale.
 
-export const DEFAULT_VACUUM_MAINT_ICON = "mdi:tools";
+/** The robot itself, like the control card — the card is about the machine, not the toolbox. */
+export const DEFAULT_VACUUM_MAINT_ICON = "mdi:robot-vacuum";
 /* Swatch size and radius come from the shared header, as on every other card. */
 
 export const VACUUM_PART_ROW_HEIGHT = 52;

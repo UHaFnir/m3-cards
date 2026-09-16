@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   OptimisticActivity,
   activityColor,
+  activityIcon,
   discoverVacuum,
   findDockDevice,
   fanSpeedKey,
@@ -396,5 +397,20 @@ describe("primaryIntent with capabilities", () => {
   it("behaves as before when nothing is declared", () => {
     expect(primaryIntent("cleaning")).toBe("pause");
     expect(primaryIntent("docked")).toBe("start");
+  });
+});
+
+describe("activityIcon", () => {
+  it("is a robot vacuum in every ordinary state", () => {
+    // It used to be a house in the dock and on the way back, so a vacuum spent
+    // most of its life drawn as a house. The colour carries the state now.
+    for (const activity of ["cleaning", "docked", "returning", "paused", "idle"] as const) {
+      expect(activityIcon(activity)).toBe("mdi:robot-vacuum");
+    }
+  });
+
+  it("keeps a mark for the two states worth noticing from across the room", () => {
+    expect(activityIcon("error")).toBe("mdi:robot-vacuum-alert");
+    expect(activityIcon("unavailable")).toBe("mdi:robot-vacuum-off");
   });
 });

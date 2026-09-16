@@ -133,7 +133,7 @@ everything below the header.
 | --- | --- | --- | --- |
 | `entity` | string | — | **Required.** The `vacuum` entity. Everything else is found from it. |
 | `name` | string | "Maintenance" | Header title. |
-| `icon` | string | `mdi:tools` | Header icon. |
+| `icon` | string | `mdi:robot-vacuum` | Header icon. |
 | `reminders` | list | — | Recurring chores: `name`, optional `icon`, `every_runs` or `every_hours`, optional `counter_entity`. |
 | `consumables` | list | discovered | Replaces the automatic list. Each entry takes `key` or `entity`, plus `name`, `icon`, `max_hours`. |
 | `warn_below` | number | `25` | Percent of service life at which a part turns amber. |

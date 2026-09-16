@@ -72,18 +72,23 @@ export function activityColor(activity: VacuumActivity): string {
   }
 }
 
+/**
+ * The header icon says what the thing is; the colour says how it is.
+ *
+ * It used to change shape with the state — a house with a bolt in the dock, a
+ * house with an arrow on the way back, a pause sign — which meant a vacuum spent
+ * most of its life shown as a house. The accent already follows the state and
+ * the status line says it in words, so the shape stays a robot vacuum.
+ *
+ * Two states keep a mark of their own, because they are the ones worth noticing
+ * from across the room: an error, and a vacuum that cannot be reached.
+ */
 export function activityIcon(activity: VacuumActivity): string {
   switch (activity) {
-    case "cleaning":
-      return "mdi:robot-vacuum";
-    case "returning":
-      return "mdi:home-import-outline";
-    case "docked":
-      return "mdi:home-lightning-bolt-outline";
-    case "paused":
-      return "mdi:pause";
     case "error":
-      return "mdi:alert-circle-outline";
+      return "mdi:robot-vacuum-alert";
+    case "unavailable":
+      return "mdi:robot-vacuum-off";
     default:
       return "mdi:robot-vacuum";
   }
