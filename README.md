@@ -4822,7 +4822,8 @@ configurable. See `state_map` below.
 Offline is grey rather than red on purpose: a printer switched off at the wall
 is a normal state, not a fault, and colouring it as one trains people to ignore
 red. The way back is the socket switch in the details block, which is why that
-block stays live when everything else does not.
+block stays live when everything else does not — and why the fold never takes
+it while the printer is offline, whatever `collapse_blocks` says.
 
 ## `state_map`, and why it exists
 
@@ -4924,15 +4925,17 @@ number their slots 1–4, and merging them would quietly hide half the filament.
 | `name` | string | job name | Header title. Falls back to the job name, then to "No job". |
 | `strip_extension` | boolean | `true` | Drops `.3mf`/`.gcode` from the job name. |
 | `icon` | string | follows the state | Overrides the header icon. |
-| `secondary_actions` | list | `[stop, files, filament]` | Which small buttons appear: `stop`, `files`, `filament`, `preheat`. |
+| `secondary_actions` | list | `[stop]` | Which small buttons may appear: `stop`, `files`, `filament`, `preheat`. A button is only drawn when it has something to do — see below. |
 | `confirm_stop` | boolean | `true` | Stop asks first, in a dialog. See below. |
 | `confirm_power_off` | boolean | `true` | So does switching an accessory **off**. Switching one on never asks. |
-| `pause_action`, `resume_action`, `stop_action`, `start_action`, `files_action`, `filament_action`, `preheat_action` | action | — | Full Home Assistant action syntax. Without one, the button opens more-info rather than guessing at a service. `start_action` additionally decides whether a Start button exists at all — see below. |
+| `pause_action`, `resume_action`, `stop_action`, `start_action`, `files_action`, `filament_action`, `preheat_action` | action | — | Full Home Assistant action syntax. Pause, resume and stop fall back to the integration's own buttons when it has them; `start_action` decides whether a Start button exists at all. |
 | `stage_entity`, `progress_entity`, `remaining_entity`, `layer_entity`, `total_layers_entity`, `job_name_entity`, `online_entity`, `error_entity` | string | discovered | Override any entity the automatic lookup got wrong. |
 | `optimistic_timeout` | number | `35000` | How long a tapped state is shown before the card stops waiting for confirmation. |
 | `show_camera`, `camera_entity`, `camera_live`, `camera_refresh`, `light_entity` | — | — | The chamber view. A still by default — see below. |
 | `show_progress`, `show_temps`, `show_speed`, `show_ams`, `show_details` | boolean | `true` | The blocks. Each also disappears on its own when its entities are missing. |
-| `details_default_open` | boolean | `false` | Whether the drawer starts open. |
+| `collapsible` | boolean | `false` | Folds the card to its header and controls, with the chevron the vacuum cards use. |
+| `collapse_blocks` | list | all | Which blocks the fold takes: `camera`, `progress`, `temps`, `speed`, `ams`, `details`. |
+| `default_collapsed`, `collapse_state_entity`, `collapse_memory` | — | — | Same keys as the vacuum, room and heading cards: start folded, keep the state in an `input_boolean`, or remember it per device or per session. |
 | `filament_warn` | number | `40` | Percent below which a tray's bar turns amber. |
 | `ams_slots` | list | discovered | Per tray: `type_entity`, `color_entity`, `remaining_entity`. One entity carrying all three as attributes also works — see below. |
 | `accessories` | list | — | Switches beside the printer: `entity`, `name`, `icon`, `color`, `power_entity`. |
@@ -4955,6 +4958,47 @@ start_action:
   action: perform-action
   perform_action: script.print_last_job
 ```
+
+## Pause, resume and stop work without configuration
+
+Bambu Lab publishes a button entity for each — pause, resume, stop — with a
+translation key that says what it is, and so do OctoPrint and Moonraker by id.
+The card finds them on the printer's device and presses them. A configured
+`pause_action`, `resume_action` or `stop_action` still wins.
+
+**The emergency stop is deliberately not one of them.** Moonraker publishes an
+`emergency_stop` button that halts the firmware, drops the heaters and needs a
+restart to recover from. Its id ends in `_stop`, so a lookup that matched on the
+last word would take it for the job's stop — and the confirmation dialog would
+then promise a cancelled print and deliver a dead printer. Anything that sounds
+like a firmware, host or emergency action is excluded from the lookup, and the
+exclusion has a test.
+
+**A small button without anything behind it is not drawn.** Stop appears when
+there is a `stop_action` or a stop button to press; files, filament and preheat
+only with an action of their own. The default used to be stop, files and
+filament — and with no action configured, files and filament both opened the
+same details dialog: two buttons that looked different, did the same thing, and
+on a phone had no label to say what either was for.
+
+## Folding
+
+`collapsible: true` puts the suite's fold chevron at the end of the header, the
+same one the vacuum cards use, and a tap folds the card down to its header and
+controls. The header still carries the percentage and the remaining time while
+a job runs, so a folded card still answers "how far along is it".
+
+`collapse_blocks` narrows what the fold takes — keep the AMS trays in view while
+the camera folds, say:
+
+```yaml
+collapsible: true
+collapse_blocks: [camera, temps, details]
+```
+
+This replaces the details block's own drawer. It used to open and close with a
+chevron of its own, a second fold inside a card the suite folds from its header
+— two gestures for the same thing. It is a block like the others now.
 
 ## Stop and power-off ask first
 
@@ -4995,8 +5039,8 @@ then refetches exactly when there is something new and never otherwise.
 
 `accessories` are the switches that belong *with* the printer but not *to* it —
 the socket it is plugged into, the AMS heater, a filament dryer. They live in
-the details drawer, which is the one block that stays usable while the printer
-is offline.
+the details block, which is the one block that stays usable — and unfolded —
+while the printer is offline.
 
 That is the whole point. Every other control is hidden when the machine is
 unreachable, because nothing sent would arrive; the socket is how it comes

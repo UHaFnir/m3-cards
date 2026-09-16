@@ -237,6 +237,10 @@ export interface DiscoveredPrinter {
   online?: string;
   error?: string;
   light?: string;
+  /** `button` entities that pause, resume and stop a job, when the integration has them. */
+  pauseButton?: string;
+  resumeButton?: string;
+  stopButton?: string;
   /** AMS trays, in slot order, each with whatever it exposes. */
   amsSlots: { type?: string; color?: string; remaining?: string; entity?: string }[];
 }
@@ -415,6 +419,22 @@ export function discoverPrinter(hass: HomeAssistant, entityId: string): Discover
   found.speedState = pick("sensor", ["speed_profile", "printing_speed", "print_speed"]);
   found.light =
     pick("light", ["chamber_light", "light"]) ?? pick("switch", ["chamber_light", "light"]);
+  // The job controls, as the button entities the integration publishes, so a
+  // card with no actions configured still pauses and stops something.
+  //
+  // `stop` has to reject more than the other two. Moonraker exposes an
+  // `emergency_stop` button — it halts the firmware, drops the heaters and needs
+  // a restart to recover from — and the suffix pass would take it for "stop" on
+  // the strength of its last word. A stop dialog that confirms a print
+  // cancellation and then kills the printer is the worst thing this card could
+  // do, so anything that sounds like a firmware or host action is out.
+  found.pauseButton = pick("button", ["pause", "pause_job", "pause_print"]);
+  found.resumeButton = pick("button", ["resume", "resume_job", "resume_print"]);
+  found.stopButton = pick(
+    "button",
+    ["stop", "stop_job", "stop_print", "cancel_job", "cancel_print"],
+    ["emergency", "estop", "e_stop", "firmware", "restart", "reboot", "shutdown", "not_aus", "nothalt"],
+  );
   found.online = pick("binary_sensor", ["online", "connected"]);
   found.error =
     pick("binary_sensor", ["print_error", "hms_errors", "error"]) ??

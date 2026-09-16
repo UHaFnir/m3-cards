@@ -82,3 +82,26 @@ export function writeCollapsed(
     // not be.
   }
 }
+
+/**
+ * Whether the fold takes one block with it.
+ *
+ * The vacuum, maintenance and printer cards all fold the same way — the header
+ * and the primary controls stay, and of everything below them the fold hides
+ * what `collapse_blocks` names, or all of it when the key is absent. Three
+ * inline copies of that rule is how one of them ends up treating an empty list
+ * as "fold nothing".
+ *
+ * `pinned` is the escape hatch for a block the fold must never take no matter
+ * what the config says: the printer's socket while the printer is offline,
+ * since it is the one control that can bring the machine back.
+ */
+export function foldHides<B extends string>(
+  block: B,
+  folded: boolean,
+  collapseBlocks: readonly B[] | undefined,
+  pinned: readonly B[] = [],
+): boolean {
+  if (!folded || pinned.includes(block)) return false;
+  return !collapseBlocks || collapseBlocks.includes(block);
+}

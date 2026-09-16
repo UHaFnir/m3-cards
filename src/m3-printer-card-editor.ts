@@ -76,7 +76,6 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       { name: "show_speed", selector: { boolean: {} } },
       { name: "show_ams", selector: { boolean: {} } },
       { name: "show_details", selector: { boolean: {} } },
-      { name: "details_default_open", selector: { boolean: {} } },
       { name: "strip_extension", selector: { boolean: {} } },
       { name: "confirm_stop", selector: { boolean: {} } },
       { name: "confirm_power_off", selector: { boolean: {} } },
@@ -109,6 +108,47 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       { name: "power_entity", selector: { entity: { domain: "sensor" } } },
       { name: "online_entity", selector: { entity: { domain: "binary_sensor" } } },
       { name: "error_entity", selector: { entity: {} } },
+    ];
+  }
+
+  /**
+   * Folding, with the same four keys and the same wording as the vacuum cards
+   * — one suite, one way of folding a card.
+   */
+  private _foldSchema(): SchemaEntry[] {
+    return [
+      { name: "collapsible", selector: { boolean: {} } },
+      {
+        name: "collapse_blocks",
+        selector: {
+          select: {
+            multiple: true,
+            mode: "list",
+            options: [
+              { value: "camera", label: this._t("editor_printer_show_camera") },
+              { value: "progress", label: this._t("editor_printer_show_progress") },
+              { value: "temps", label: this._t("editor_printer_show_temps") },
+              { value: "speed", label: this._t("editor_printer_show_speed") },
+              { value: "ams", label: this._t("editor_printer_show_ams") },
+              { value: "details", label: this._t("editor_printer_show_details") },
+            ],
+          },
+        },
+      },
+      { name: "default_collapsed", selector: { boolean: {} } },
+      { name: "collapse_state_entity", selector: { entity: { domain: "input_boolean" } } },
+      {
+        name: "collapse_memory",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "device", label: this._t("editor_printer_collapse_device") },
+              { value: "session", label: this._t("editor_printer_collapse_session") },
+            ],
+          },
+        },
+      },
     ];
   }
 
@@ -195,7 +235,11 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       show_speed: "editor_printer_show_speed",
       show_ams: "editor_printer_show_ams",
       show_details: "editor_printer_show_details",
-      details_default_open: "editor_printer_details_open",
+      collapsible: "editor_printer_collapsible",
+      collapse_blocks: "editor_printer_collapse_blocks",
+      default_collapsed: "editor_printer_default_collapsed",
+      collapse_state_entity: "editor_printer_collapse_entity",
+      collapse_memory: "editor_printer_collapse_memory",
       strip_extension: "editor_printer_strip_extension",
       confirm_stop: "editor_printer_confirm_stop",
       confirm_power_off: "editor_printer_confirm_power_off",
@@ -218,6 +262,11 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
     // exist.
     for (const [key, value] of Object.entries(next)) {
       if (value === "" || value === null) delete next[key];
+    }
+    // An empty selection means "fold everything", which is the absent key —
+    // storing [] would silently make the fold hide nothing at all.
+    if (Array.isArray(next.collapse_blocks) && next.collapse_blocks.length === 0) {
+      delete next.collapse_blocks;
     }
     this._emit(next as unknown as M3PrinterCardConfig);
   }
@@ -287,13 +336,19 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
       camera_live: cfg.camera_live ?? false,
       camera_refresh: cfg.camera_refresh ?? PRINTER_CAMERA_REFRESH_S,
     };
+    const foldData = {
+      collapsible: cfg.collapsible ?? false,
+      collapse_blocks: cfg.collapse_blocks ?? [],
+      default_collapsed: cfg.default_collapsed ?? false,
+      collapse_state_entity: cfg.collapse_state_entity ?? "",
+      collapse_memory: cfg.collapse_memory ?? "device",
+    };
     const displayData = {
       show_progress: cfg.show_progress ?? true,
       show_temps: cfg.show_temps ?? true,
       show_speed: cfg.show_speed ?? true,
       show_ams: cfg.show_ams ?? true,
       show_details: cfg.show_details ?? true,
-      details_default_open: cfg.details_default_open ?? false,
       strip_extension: cfg.strip_extension ?? true,
       confirm_stop: cfg.confirm_stop ?? true,
       confirm_power_off: cfg.confirm_power_off ?? true,
@@ -337,6 +392,7 @@ export class M3PrinterCardEditor extends LitElement implements LovelaceCardEdito
         ${panel("editor_printer_device", DEFAULT_PRINTER_ICON, deviceData, this._deviceSchema(), "editor_printer_entity_hint", true)}
         ${panel("editor_printer_camera", "mdi:cctv", cameraData, this._cameraSchema(), "editor_printer_camera_live_hint")}
         ${panel("editor_printer_display", "mdi:view-dashboard-outline", displayData, this._displaySchema())}
+        ${panel("editor_printer_fold", "mdi:unfold-less-horizontal", foldData, this._foldSchema(), "editor_printer_collapse_blocks_hint")}
         ${panel("editor_printer_sensors", "mdi:tune", sensorData, this._sensorSchema(), "editor_printer_sensors_hint")}
         ${panel("editor_printer_actions", "mdi:gesture-tap-button", actionData, this._actionSchema(), "editor_printer_actions_hint")}
 

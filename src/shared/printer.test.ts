@@ -371,3 +371,41 @@ describe("AMS discovery", () => {
     ]);
   });
 });
+
+describe("job-control buttons", () => {
+  it("finds Bambu's pause, resume and stop by translation key", () => {
+    // Real German entity ids from a P1S; the keys are what make them findable.
+    const hass = fakeHass({
+      "sensor.p1s_druckstatus": { device_id: "dev", translation_key: "print_status" },
+      "button.p1s_druckvorgang_anhalten": { device_id: "dev", translation_key: "pause" },
+      "button.p1s_druckvorgang_fortsetzen": { device_id: "dev", translation_key: "resume" },
+      "button.p1s_druckvorgang_beenden": { device_id: "dev", translation_key: "stop" },
+      "button.p1s_aktualisierung_erzwingen": { device_id: "dev", translation_key: "refresh" },
+    });
+    const found = discoverPrinter(hass, "sensor.p1s_druckstatus");
+    expect(found.pauseButton).toBe("button.p1s_druckvorgang_anhalten");
+    expect(found.resumeButton).toBe("button.p1s_druckvorgang_fortsetzen");
+    expect(found.stopButton).toBe("button.p1s_druckvorgang_beenden");
+  });
+
+  it("never takes an emergency stop for the job's stop button", () => {
+    // Moonraker's emergency_stop halts the firmware. Its id ends in _stop, so
+    // the suffix pass would match it — and the stop dialog would then confirm
+    // a cancellation and kill the printer.
+    const hass = fakeHass({
+      "sensor.klipper_state": { device_id: "dev" },
+      "button.klipper_emergency_stop": { device_id: "dev" },
+      "button.klipper_firmware_restart": { device_id: "dev" },
+    });
+    expect(discoverPrinter(hass, "sensor.klipper_state").stopButton).toBeUndefined();
+  });
+
+  it("finds the real job stop next to an emergency stop", () => {
+    const hass = fakeHass({
+      "sensor.klipper_state": { device_id: "dev" },
+      "button.klipper_emergency_stop": { device_id: "dev" },
+      "button.klipper_cancel_print": { device_id: "dev" },
+    });
+    expect(discoverPrinter(hass, "sensor.klipper_state").stopButton).toBe("button.klipper_cancel_print");
+  });
+});

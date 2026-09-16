@@ -975,6 +975,13 @@ export type VacuumBlock = "map" | "rooms" | "fan_speed" | "mop" | "buttons" | "c
 
 export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
 
+/**
+ * The printer card's foldable blocks. The header and the controls are not in
+ * the list: like the vacuum's state and Start/Pause, they are what the card is
+ * for at a glance and never fold.
+ */
+export type PrinterBlock = "camera" | "progress" | "temps" | "speed" | "ams" | "details";
+
 /** Raw status value → one of the six printer states. */
 export type PrinterStateMap = Record<string, import("./shared/printer").PrinterState>;
 
@@ -1043,7 +1050,20 @@ export interface M3PrinterCardConfig {
   show_speed?: boolean;
   show_ams?: boolean;
   show_details?: boolean;
-  details_default_open?: boolean;
+  /**
+   * Folds the card down to its header and controls, the same way — and with
+   * the same keys — as the vacuum cards. See `collapse_blocks`.
+   */
+  collapsible?: boolean;
+  /**
+   * Which blocks the fold takes. Absent, it takes all of them. While the printer
+   * is offline `details` is never folded whatever this says: the socket in it is
+   * the one control that can bring the machine back.
+   */
+  collapse_blocks?: PrinterBlock[];
+  default_collapsed?: boolean;
+  collapse_state_entity?: string;
+  collapse_memory?: CollapseMemory;
   /** Drops a `.3mf`/`.gcode` ending from the job name. */
   strip_extension?: boolean;
   filament_warn?: number;

@@ -6,6 +6,7 @@ import type {
   LovelaceCard,
   LovelaceGridOptions,
   M3PrinterCardConfig,
+  PrinterBlock,
   PrinterSecondaryAction,
 } from "./types";
 import {
@@ -58,9 +59,6 @@ import {
   PRINTER_ACCESSORY_RADIUS,
   PRINTER_DETAIL_CHIP_HEIGHT,
   PRINTER_DETAIL_CHIP_RADIUS,
-  PRINTER_DETAILS_HEIGHT,
-  PRINTER_DETAILS_RADIUS,
-  PRINTER_DETAILS_RADIUS_OPEN,
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
 import { STANDARD_EASING } from "./shared/animation";
@@ -74,6 +72,8 @@ import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/g
 import { OptimisticState } from "./shared/optimistic-state";
 import { confirmDialogStyles, renderConfirmDialog, type ConfirmRequest } from "./shared/confirm-dialog";
 import { syncDialogOpenState } from "./shared/popup-card";
+import { foldHides, readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
 import { hassChangeMatters } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
 import {
@@ -116,7 +116,8 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   @state() private _confirm?: ConfirmRequest;
   /** Bumped by the ticker so the camera still gets a fresh URL. */
   @state() private _cameraTick = 0;
-  @state() private _detailsOpen?: boolean;
+  /** Whether the card is folded down to its header and controls. */
+  @state() private _folded = false;
   private _ticker = new VisibleTicker(this, () => {
     this._cameraTick++;
   });
@@ -150,6 +151,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
   public setConfig(config: M3PrinterCardConfig): void {
     if (!config.entity) throw new Error("m3-printer-card: 'entity' is required");
     this._config = config;
+    this._folded = config.collapsible ? readCollapsed(this.hass, this._foldTarget) : false;
     this._discovered = undefined;
     this._discoveredFor = undefined;
     this._optimistic.clear();
@@ -185,7 +187,28 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       this.renderRoot.querySelector("dialog.m3-confirm") as HTMLDialogElement | null,
       this._confirm !== undefined,
     );
+    if (!this._config?.collapsible) return;
+    // An entity-backed fold can be changed from another dashboard or by an
+    // automation, so it is re-read rather than only written on a tap.
+    const wanted = readCollapsed(this.hass, this._foldTarget);
+    if (wanted !== this._folded) this._folded = wanted;
   }
+
+  /** Same keys and the same storage as the vacuum cards, so the suite folds one way. */
+  private get _foldTarget(): CollapseTarget {
+    return {
+      entity: this._config?.collapse_state_entity,
+      storageKey: `m3-printer-folded:${location.pathname}:${this._config?.entity ?? ""}`,
+      defaultCollapsed: this._config?.default_collapsed,
+      memory: this._config?.collapse_memory,
+    };
+  }
+
+  private _toggleFold = (e: Event): void => {
+    e.stopPropagation();
+    this._folded = !this._folded;
+    writeCollapsed(this.hass, this._foldTarget, this._folded);
+  };
 
   protected shouldUpdate(changed: PropertyValues): boolean {
     return hassChangeMatters(changed, this.hass, this._watched());
@@ -363,9 +386,34 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     this._optimistic.set(optimisticPrinterState(intent, state));
     this.requestUpdate();
     const cfg = this._config!;
-    if (intent === "pause") this._run(cfg.pause_action);
-    else if (intent === "resume") this._run(cfg.resume_action);
+    const d = this._entities();
+    if (intent === "pause") this._run(cfg.pause_action, this._pressOr(d?.pauseButton));
+    else if (intent === "resume") this._run(cfg.resume_action, this._pressOr(d?.resumeButton));
     else this._run(cfg.start_action, () => this._fireMoreInfo(cfg.entity));
+  }
+
+  /**
+   * What a job control does when no action is configured: press the button
+   * the integration publishes for it, or open the printer's details.
+   *
+   * Pause and resume used to have no fallback at all. With nothing configured
+   * a tap did nothing — except set the optimistic state, so the card said
+   * "Paused" for thirty-five seconds while the printer printed on. A control
+   * that lies is worse than one that opens a dialog.
+   */
+  private _pressOr(button: string | undefined): () => void {
+    return () => {
+      if (button && this.hass) {
+        this.hass.callService("button", "press", { entity_id: button });
+        return;
+      }
+      this._fireMoreInfo(this._config?.entity);
+    };
+  }
+
+  /** Whether an action is configured and does something. */
+  private _hasAction(action: HaActionConfig | undefined): boolean {
+    return action !== undefined && action.action !== "none";
   }
 
   /**
@@ -391,7 +439,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
    */
   private _stop(): void {
     const cfg = this._config!;
-    const send = () => this._run(cfg.stop_action, () => this._fireMoreInfo(cfg.entity));
+    const send = () => this._run(cfg.stop_action, this._pressOr(this._entities()?.stopButton));
     if (cfg.confirm_stop === false) {
       send();
       return;
@@ -743,41 +791,29 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     const accessories = this._config?.accessories ?? [];
     if (!chips.length && !accessories.length) return nothing;
 
-    const open = this._detailsOpen ?? this._config?.details_default_open ?? false;
-
+    // No drawer of its own any more. It used to open and close with a button
+    // and a chevron of its own, a second fold inside a card the suite folds
+    // from its header — two different gestures for the same thing. It is a
+    // block like the others now, and the card-level fold decides.
     return html`
       <div class="details">
-        <button
-          class="details-toggle ${open ? "open" : ""}"
-          aria-expanded=${String(open)}
-          @click=${() => {
-            this._detailsOpen = !open;
-          }}
-        >
-          <span class="details-icon"><ha-icon icon="mdi:information-outline"></ha-icon></span>
-          <span class="details-label">${this._t("printer_details")}</span>
-          <ha-icon class="details-chevron" icon="mdi:chevron-down"></ha-icon>
-        </button>
-        ${open
-          ? html`
-              ${chips.length
-                ? html`<div class="detail-chips">
-                    ${chips.map(
-                      (chip) => html`
-                        <span class="detail-chip ${chip.tone}">
-                          <ha-icon icon=${chip.icon}></ha-icon>
-                          <span>${chip.text}</span>
-                        </span>
-                      `,
-                    )}
-                  </div>`
-                : nothing}
-              ${accessories.length
-                ? html`<div class="accessories">
-                    ${accessories.map((a) => this._renderAccessory(a))}
-                  </div>`
-                : nothing}
-            `
+        <div class="section-label">${this._t("printer_details")}</div>
+        ${chips.length
+          ? html`<div class="detail-chips">
+              ${chips.map(
+                (chip) => html`
+                  <span class="detail-chip ${chip.tone}">
+                    <ha-icon icon=${chip.icon}></ha-icon>
+                    <span>${chip.text}</span>
+                  </span>
+                `,
+              )}
+            </div>`
+          : nothing}
+        ${accessories.length
+          ? html`<div class="accessories">
+              ${accessories.map((a) => this._renderAccessory(a))}
+            </div>`
           : nothing}
       </div>
     `;
@@ -925,6 +961,14 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
       ? resolveThemeColor(this._config.accent_color)
       : printerStateColor(state);
     const radius = `${this._config.radius ?? DEFAULT_PRINTER_RADIUS}px`;
+    // Header and controls never fold. Of the rest, the fold takes what
+    // `collapse_blocks` names — or everything. While the printer is offline the
+    // details stay whatever the config says, because the socket lives there
+    // and it is the only control that can bring the machine back.
+    const folded = !!this._config.collapsible && this._folded;
+    const pinned: PrinterBlock[] = state === "offline" ? ["details"] : [];
+    const hidden = (block: PrinterBlock): boolean =>
+      foldHides(block, folded, this._config!.collapse_blocks, pinned);
 
     return html`
       <ha-card
@@ -944,10 +988,14 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
             colors.cardBackgroundCss ? ` background: ${colors.cardBackgroundCss};` : ""
           }`}
         >
-          ${this._renderCamera(state)} ${this._renderHeader(state)}
-          ${this._renderProgress(state)} ${this._renderTemps()}
-          ${this._renderControls(state, pending)} ${this._renderSpeed(state)}
-          ${this._renderAms()} ${this._renderDetails(state)}
+          ${hidden("camera") ? nothing : this._renderCamera(state)}
+          ${this._renderHeader(state)}
+          ${hidden("progress") ? nothing : this._renderProgress(state)}
+          ${hidden("temps") ? nothing : this._renderTemps()}
+          ${this._renderControls(state, pending)}
+          ${hidden("speed") ? nothing : this._renderSpeed(state)}
+          ${hidden("ams") ? nothing : this._renderAms()}
+          ${hidden("details") ? nothing : this._renderDetails(state)}
           ${this._config.card_version ? html`<div class="version">${CARD_VERSION}</div>` : nothing}
         </div>
       </ha-card>
@@ -999,7 +1047,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     const remaining = this._remainingText();
     // `undefined` rather than `nothing`: the shared header types its trailing
     // slot as an optional template, and Lit's `nothing` is a symbol.
-    const trailing =
+    const readout =
       running && progress !== undefined
         ? html`
             <div class="progress-readout">
@@ -1012,6 +1060,21 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
               ${remaining ? html`<div class="remaining">${remaining}</div>` : nothing}
             </div>
           `
+        : nothing;
+    // The suite's own chevron, where the vacuum cards put theirs: at the end of
+    // the header, after whatever figure the card shows there.
+    const arrow = cfg.collapsible
+      ? renderFoldArrow({
+          folded: this._folded,
+          accent: "var(--m3pr-accent)",
+          host: this,
+          label: name,
+          onToggle: this._toggleFold,
+        })
+      : nothing;
+    const trailing =
+      readout !== nothing || arrow !== nothing
+        ? html`<div class="header-trailing">${readout}${arrow}</div>`
         : undefined;
 
     return renderCardHeader({
@@ -1071,7 +1134,11 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
           ? "mdi:alert-circle-outline"
           : "mdi:play";
 
-    const secondary = cfg.secondary_actions ?? (["stop", "files", "filament"] as const);
+    // Stop alone by default. Files and filament were in this list, and with no
+    // action behind them both opened the same details dialog — two buttons that
+    // looked different and did the same thing, with no label on a phone to say
+    // what either was meant for.
+    const secondary = cfg.secondary_actions ?? (["stop"] as const);
 
     // No primary button rather than a disabled one: an idle printer with no
     // start action has nothing to press, and a greyed-out Start invites the
@@ -1096,15 +1163,27 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     `;
   }
 
-  /** A control that cannot do anything in this state is not drawn. */
+  /**
+   * A control that cannot do anything is not drawn — in this state, or at all.
+   *
+   * Stop counts as able when a `stop_action` is configured or the integration
+   * publishes a stop button; the others only with an action of their own. A
+   * button with nothing behind it would fall back to opening details, which is
+   * a way of drawing a button that is not one.
+   */
   private _secondaryApplies(action: PrinterSecondaryAction, state: PrinterState): boolean {
+    const cfg = this._config!;
     switch (action) {
       case "stop":
-        return isRunning(state);
+        return isRunning(state) && (this._hasAction(cfg.stop_action) || !!this._entities()?.stopButton);
       case "preheat":
-        return !isRunning(state);
+        return !isRunning(state) && this._hasAction(cfg.preheat_action);
+      case "files":
+        return this._hasAction(cfg.files_action);
+      case "filament":
+        return this._hasAction(cfg.filament_action);
       default:
-        return true;
+        return false;
     }
   }
 
@@ -1150,6 +1229,7 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
     glassCardStyles,
     cardHeaderStyles,
     confirmDialogStyles,
+    foldArrowStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -1610,52 +1690,13 @@ export class M3PrinterCard extends TemplatedCard(LitElement) implements Lovelace
         gap: 6px;
       }
 
-      .details-toggle {
-        height: ${unsafeCSS(PRINTER_DETAILS_HEIGHT)}px;
-        border: none;
-        border-radius: ${unsafeCSS(PRINTER_DETAILS_RADIUS)}px;
-        padding: 0 12px;
-        background: color-mix(in srgb, var(--m3p-text, currentColor) 6%, transparent);
-        color: var(--m3p-text, var(--primary-text-color));
+      /* The progress figure and the fold chevron share the header's trailing
+         slot. Centred on each other, so the chevron does not ride up to the
+         percentage's baseline when the remaining time adds a second line. */
+      .header-trailing {
         display: flex;
         align-items: center;
         gap: 10px;
-        font-family: inherit;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: border-radius 0.35s ${unsafeCSS(STANDARD_EASING)};
-      }
-
-      .details-toggle.open {
-        border-radius: ${unsafeCSS(PRINTER_DETAILS_RADIUS_OPEN)}px;
-      }
-
-      .details-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 14px;
-        background: color-mix(in srgb, var(--m3p-text, currentColor) 8%, transparent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        --mdc-icon-size: 16px;
-      }
-
-      .details-label {
-        flex: 1;
-        text-align: left;
-      }
-
-      .details-chevron {
-        --mdc-icon-size: 20px;
-        opacity: 0.5;
-        transition: transform 0.35s ${unsafeCSS(STANDARD_EASING)};
-      }
-
-      /* Points the way it will move, like every other fold in the suite. */
-      .details-toggle:not(.open) .details-chevron {
-        transform: rotate(-90deg);
       }
 
       .detail-chips {

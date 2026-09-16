@@ -51,7 +51,7 @@ import {
   levelSliderStyles,
   type LevelStep,
 } from "./shared/level-slider";
-import { readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+import { foldHides, readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
 import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
 // The scroll-fade controller for these rows arrives with PR #15; until it
 // lands the row scrolls without the edge hint, which is what the standalone
@@ -431,8 +431,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     // `collapse_blocks` names — and everything, when it names nothing.
     const folded = !!this._config.collapsible && this._folded;
     const foldable = this._config.collapse_blocks;
-    const hidden = (block: VacuumBlock): boolean =>
-      folded && (!foldable || foldable.includes(block));
+    const hidden = (block: VacuumBlock): boolean => foldHides(block, folded, foldable);
 
     return html`
       <ha-card

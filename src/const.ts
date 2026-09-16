@@ -2236,9 +2236,6 @@ export const PRINTER_AMS_BAR_HEIGHT = 3;
 export const PRINTER_FILAMENT_WARN = 40;
 
 /** Details block. */
-export const PRINTER_DETAILS_HEIGHT = 42;
-export const PRINTER_DETAILS_RADIUS = 19;
-export const PRINTER_DETAILS_RADIUS_OPEN = 13;
 export const PRINTER_DETAIL_CHIP_HEIGHT = 28;
 export const PRINTER_DETAIL_CHIP_RADIUS = 14;
 export const PRINTER_ACCESSORY_HEIGHT = 46;

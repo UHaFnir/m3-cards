@@ -93,6 +93,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   much is left. Both work, and a spool that cannot report its level shows no bar
   rather than an empty one.
 
+  **Pause, resume and stop work without configuration**, pressing the button
+  entities the integration publishes — and deliberately never an emergency stop,
+  which a lookup matching on the last word of `emergency_stop` would otherwise
+  have taken for the job's stop. **It folds the way the vacuum cards do**, from a
+  chevron at the end of the header, with `collapse_blocks` choosing what goes.
+  While the printer is offline the details never fold: the socket is in there.
+
 - **A compact mode for the light card**, via `compact: true`. It drops the power
   button and makes the header icon the toggle instead — the split the native
   tile card makes, where the icon is the control and the rest of the header

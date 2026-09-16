@@ -48,6 +48,8 @@ The suite registers 44 cards.
   reads as idle rather than as an error. The camera is a still, not a stream,
   and the badge says so. The socket the printer hangs on stays usable while
   everything else dims — it is the one control that can bring the machine back.
+  Pause, resume and stop press the integration's own buttons with nothing
+  configured, and the card folds from its header the way the vacuum cards do.
 
 - **M3 Appliance Card** (`m3-appliance-card`) — washing machine, dryer, oven,
   fridge, coffee machine, litter robot, printer, NAS: the machines that have a

@@ -40,7 +40,7 @@ import {
 import { localize, type TranslationKey } from "./localize";
 import { activateOnKey } from "./shared/a11y";
 import { STANDARD_EASING } from "./shared/animation";
-import { readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
+import { foldHides, readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
 import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
 import { resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
 import { formatNumber } from "./shared/formatting";
@@ -288,8 +288,7 @@ export class M3VacuumMaintenanceCard
     // `collapse_blocks` names, and everything when it names nothing.
     const folded = !!this._config.collapsible && this._folded;
     const foldable = this._config.collapse_blocks;
-    const hidden = (block: VacuumMaintenanceBlock): boolean =>
-      folded && (!foldable || foldable.includes(block));
+    const hidden = (block: VacuumMaintenanceBlock): boolean => foldHides(block, folded, foldable);
 
     const parts = this._parts();
     const due = parts.filter((p) => {
