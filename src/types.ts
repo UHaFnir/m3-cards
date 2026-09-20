@@ -765,6 +765,8 @@ export interface VacuumEntityOverrides {
   volume_entity?: string;
 }
 
+export type VacuumMapFit = "plan" | "picture";
+
 export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigBase {
   type: string;
   /** The `vacuum` entity. Everything else is optional. */
@@ -818,6 +820,12 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigB
    * tap off while keeping the magnifier.
    */
   map_tap_action?: HaActionConfig;
+  /**
+   * `plan` (the default) crops the empty margin off the picture so the floor
+   * plan fills the box it was given; `picture` shows the file as it comes,
+   * margin and all.
+   */
+  map_fit?: VacuumMapFit;
   show_progress?: boolean;
   show_rooms?: boolean;
   /**

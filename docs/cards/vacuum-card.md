@@ -54,11 +54,33 @@ Two things have to be true before a tap does anything: the vacuum must declare
 on the vacuum entity itself — its gear icon, *"Map vacuum segments to areas"*.
 Without the mapping the service is called and the robot ignores it.
 
+## The map is cropped to the floor plan
+
+A Roborock map is a picture of the robot's **whole coordinate space**, and a
+flat fills a corner of it. `object-fit: contain` then fits the empty margin as
+carefully as the rooms, which is why an uncropped map arrives as a stamp in the
+middle of a 360-pixel box with air on every side.
+
+So the card measures where anything is actually drawn and hands that to
+`object-view-box`. Same box, same layout, a plan several times larger — what
+you would otherwise get by pinching the enlarged map every time you looked at
+it.
+
+The measurement runs on the picture's `load`, once per version of it, against a
+240-pixel-wide copy: plenty to find an edge, and cheap enough for a map that
+changes every few seconds while the robot is out. A row of pixels counts as
+content only when enough of it is opaque, so the path trace and a no-go line do
+not pin the crop to the edge of the canvas — with one honest limit, that a
+stroke running *along* an axis fills its own row or column and is kept.
+
+`map_fit: picture` turns it off and shows the file as it comes. Browsers
+without `object-view-box` (Firefox, at the time of writing) also show the whole
+picture — the declaration is simply ignored, and nothing else changes.
+
 ## Zooming the map
 
-A Roborock map arrives with wide transparent margins baked into the picture, so
-`contain` fits the whole canvas and the floor plan ends up a stamp in the middle
-of it. Rather than crop — which would hide rooms — the map can be enlarged:
+Rather than crop the picture to fill the box — which would hide rooms — the map
+can be enlarged:
 **the magnifier in its bottom corner** opens the picture full-screen, and there
 it pinches, drags and wheel-zooms. Double-tap toggles between 1× and 2×, and a
 second button goes back to 1×.
@@ -202,6 +224,7 @@ something.
 | `rooms` | list | — | Home Assistant area ids the vacuum can be sent to, in the order they should be offered. **Required for the block to appear** — see below. |
 | `map_zoom` | boolean | `true` | The magnifier that opens the map full-screen, where it pinches, drags and wheel-zooms. `false` leaves the map a plain picture. |
 | `map_max_zoom` | number | `4` | How far the pinch may go in that view. |
+| `map_fit` | `plan` \| `picture` | `plan` | `plan` crops the empty margin off so the floor plan fills the box. See above. |
 | `map_tap_action` | action | opens the enlarged map | What a tap on the map does. The suite's usual action grammar, so `none`, `more-info`, `navigate`, `call-service` and the rest all apply. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |

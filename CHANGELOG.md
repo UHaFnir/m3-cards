@@ -32,9 +32,14 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   sliders: a thick track with a gap either side of the handle, stop indicators,
   and a handle that widens under the finger.
 
-  **The map is a picture on the card and a screen of its own.** A Roborock map
-  carries wide transparent margins, so fitting the whole canvas leaves the floor
-  plan a stamp in the middle of it — but pinching it where it sits needs
+  **The map is cropped to the flat, and enlarges to its own screen.** Roborock
+  sends a picture of the robot's whole coordinate space, in which a flat fills a
+  corner, so fitting the whole canvas leaves the floor plan a stamp in the
+  middle of a 360-pixel box. The card measures where anything is actually drawn
+  and hands that to `object-view-box`: same box, same layout, a plan several
+  times larger. `map_fit: picture` shows the file as it comes.
+
+  Enlarging is the other half of it. Pinching the map where it sits needs
   `touch-action: none`, and that swallows the vertical swipe the dashboard
   scrolls with. The map is the tallest thing on the card, so that left a phone
   a few pixels beside it to scroll on. The magnifier in its corner opens the

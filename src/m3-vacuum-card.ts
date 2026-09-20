@@ -21,6 +21,7 @@ import {
   VACUUM_MAP_HEIGHT,
   VACUUM_MAP_MAX_ZOOM,
   VACUUM_MAP_RADIUS,
+  VACUUM_MAP_SAMPLE_PX,
   VACUUM_MAX_CHIPS,
   VACUUM_BATTERY_HEIGHT,
   VACUUM_BATTERY_LOW,
@@ -42,6 +43,7 @@ import {
 import { localize, type TranslationKey } from "./localize";
 import { formatNumber } from "./shared/formatting";
 import { PanZoom, type PanZoomState, PAN_ZOOM_IDENTITY } from "./shared/pan-zoom";
+import { contentInset, insetCss } from "./shared/image-crop";
 import { acknowledgeReminder, reminderStates } from "./shared/vacuum-reminders";
 import { stopSwipe } from "./shared/swipe";
 import { activateOnKey } from "./shared/a11y";
@@ -129,6 +131,9 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _mapView: PanZoomState = { ...PAN_ZOOM_IDENTITY };
   @state() private _mapOpen = false;
   private _mapOpenedAt = 0;
+  /** `object-view-box` cropping the map to its floor plan, and the src it is for. */
+  @state() private _mapInset?: string;
+  private _mapInsetFor?: string;
   private _mapPanZoom = new PanZoom({
     max: VACUUM_MAP_MAX_ZOOM,
     onChange: (view) => {
@@ -780,7 +785,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         @keydown=${tappable ? activateOnKey(() => this._mapTapped()) : nothing}
         @click=${tappable ? () => this._mapTapped() : nothing}
       >
-        <img src=${source.src} alt="" />
+        <img
+          src=${source.src}
+          style=${this._mapInset ? `object-view-box: ${this._mapInset};` : nothing}
+          alt=""
+          @load=${this._measureMap}
+        />
         ${parts.length
           ? html`<div class="map-chip">${parts.join(" · ")}</div>`
           : nothing}
@@ -846,7 +856,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
           @mouseup=${stopSwipe}
         >
           <img
-            style=${`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale});`}
+            style=${`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale});` +
+            (this._mapInset ? ` object-view-box: ${this._mapInset};` : "")}
             src=${source.src}
             alt=""
           />
@@ -894,6 +905,49 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     if (!picture) return undefined;
     return { entityId, src: `${picture}${picture.includes("?") ? "&" : "?"}s=${state!.state}` };
   }
+
+  /**
+   * Crops the map to its floor plan.
+   *
+   * A Roborock map is a picture of the robot's whole coordinate space, and a
+   * flat takes up a corner of it. `object-fit: contain` then fits the empty
+   * margin as carefully as the rooms, which is why the plan arrives as a stamp
+   * in the middle of a 360px box with air on every side. Measuring where the
+   * content actually is and handing that to `object-view-box` lets the same
+   * box show the same plan several times larger, with no layout change at all.
+   *
+   * It runs on the picture's `load`, once per src, against a downscaled copy —
+   * a few hundred pixels are plenty to find an edge, and a full-size readback
+   * of a map that changes every few seconds during a run would not be. The
+   * image comes from Home Assistant's own origin, so the canvas is not tainted
+   * and `getImageData` is allowed; if a future proxy changes that, the throw is
+   * caught and the map simply stays as it was.
+   */
+  private _measureMap = (e: Event): void => {
+    if (this._config?.map_fit === "picture") return;
+    const img = e.currentTarget as HTMLImageElement;
+    const src = img.currentSrc || img.src;
+    if (!src || this._mapInsetFor === src) return;
+    if (!img.naturalWidth || !img.naturalHeight) return;
+    if (!CSS.supports?.("object-view-box", "inset(1% 1% 1% 1%)")) return;
+    this._mapInsetFor = src;
+    try {
+      const width = Math.min(VACUUM_MAP_SAMPLE_PX, img.naturalWidth);
+      const height = Math.max(1, Math.round((width / img.naturalWidth) * img.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, width, height);
+      const found = contentInset(ctx.getImageData(0, 0, width, height).data, width, height);
+      this._mapInset = found ? insetCss(found) : undefined;
+    } catch {
+      // A tainted canvas, or a picture that never decoded. Either way the
+      // uncropped map is a working map.
+      this._mapInset = undefined;
+    }
+  };
 
   private _openMap(): void {
     this._mapPanZoom.reset();

@@ -179,6 +179,18 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
         selector: { number: { min: 120, max: 800, step: 20, mode: "slider", unit_of_measurement: "px" } },
       },
       { name: "map_zoom", selector: { boolean: {} } },
+      {
+        name: "map_fit",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "plan", label: this._t("editor_vacuum_map_fit_plan") },
+              { value: "picture", label: this._t("editor_vacuum_map_fit_picture") },
+            ],
+          },
+        },
+      },
       { name: "map_tap_action", selector: { ui_action: {} } },
       { name: "show_fan_speed", selector: { boolean: {} } },
       { name: "show_mop_intensity", selector: { boolean: {} } },
@@ -266,6 +278,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       map_height: "editor_vacuum_map_height",
       map_zoom: "editor_vacuum_map_zoom",
       map_tap_action: "editor_vacuum_map_tap_action",
+      map_fit: "editor_vacuum_map_fit",
       show_fan_speed: "editor_vacuum_show_fan_speed",
       show_mop_intensity: "editor_vacuum_show_mop_intensity",
       show_mop_mode: "editor_vacuum_show_mop_mode",
@@ -374,6 +387,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       map_height: cfg.map_height ?? VACUUM_MAP_HEIGHT,
       map_zoom: cfg.map_zoom ?? true,
       map_tap_action: cfg.map_tap_action,
+      map_fit: cfg.map_fit ?? "plan",
       show_fan_speed: cfg.show_fan_speed ?? true,
       show_mop_intensity: cfg.show_mop_intensity ?? true,
       show_mop_mode: cfg.show_mop_mode ?? false,
@@ -440,6 +454,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
             ></ha-form>
             <div class="hint">${this._t("editor_vacuum_map_zoom_hint")}</div>
             <div class="hint">${this._t("editor_vacuum_map_tap_action_hint")}</div>
+            <div class="hint">${this._t("editor_vacuum_map_fit_hint")}</div>
           </div>
         </ha-expansion-panel>
 

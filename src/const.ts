@@ -2164,6 +2164,13 @@ export const VACUUM_PART_MAX_HOURS: Record<string, number> = {
 };
 
 /**
+ * How wide a copy of the map the crop is measured on. Finding the edge of a
+ * floor plan needs no more than this, and a full-size readback of a picture
+ * that changes every few seconds during a run would cost real time.
+ */
+export const VACUUM_MAP_SAMPLE_PX = 240;
+
+/**
  * The range of the `input_number` the editor creates for a reminder.
  *
  * It holds a *meter reading* — the lifetime run count, or hours of runtime, at
