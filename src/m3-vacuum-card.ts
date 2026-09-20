@@ -73,7 +73,7 @@ import { findStateRule } from "./shared/state-rules";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { resolveCommonColors, resolveThemeColor, tintOn, inkOn } from "./shared/color-config";
-import { hassChangeMatters } from "./shared/should-update";
+import { hassChangeMatters, listEntities } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
 import {
   OptimisticActivity,
@@ -197,10 +197,42 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     return hassChangeMatters(changed, this.hass, this._watched());
   }
 
-  /** Every entity the card reads, in one place, for `shouldUpdate`. */
+  /**
+   * Every entity the card reads, in one place, for `shouldUpdate`.
+   *
+   * Under-declaring here is the documented hazard of `hassChangeMatters`: what
+   * is missing simply stops reacting. This list was short enough to hide it —
+   * the vacuum entity itself changes on every poll, so everything else looked
+   * like it was updating when it was only riding along thirty seconds late.
+   * The map, which gets a new picture every few seconds while the robot is
+   * out, and a reminder's counter, which nothing else touches, were the two
+   * that showed.
+   */
   private _watched(): (string | undefined)[] {
     const d = this._entities();
-    return [this._config?.entity, d?.progress, d?.area, d?.time, d?.status];
+    return [
+      this._config?.entity,
+      this._entity("map_entity", "map"),
+      d?.progress,
+      d?.area,
+      d?.time,
+      d?.status,
+      d?.currentRoom,
+      d?.vacuumError,
+      d?.dockError,
+      d?.mopDryingRemaining,
+      d?.lastCleanEnd,
+      d?.mopMode,
+      d?.mopIntensity,
+      d?.cleaningMode,
+      d?.emptyMode,
+      d?.selectedMap,
+      ...Object.values(d?.binary ?? {}),
+      ...Object.values(d?.switches ?? {}),
+      ...Object.values(d?.totals ?? {}),
+      ...(this._config?.reminders ?? []).map((r) => r.counter_entity),
+      ...listEntities(this._config?.buttons),
+    ];
   }
 
   private get _foldTarget(): CollapseTarget {

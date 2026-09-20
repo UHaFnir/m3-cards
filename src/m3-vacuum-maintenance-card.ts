@@ -127,8 +127,14 @@ export class M3VacuumMaintenanceCard
     return [
       this._config?.entity,
       ...Object.values(d.consumables),
+      ...Object.values(d.binary),
       ...Object.values(d.switches),
       ...Object.values(d.totals),
+      // A reminder's counter is touched by nothing else on this card, so
+      // leaving it out meant acknowledging one changed the helper and not the
+      // row above the finger: it kept saying "due" until some other entity
+      // happened to tick.
+      ...(this._config?.reminders ?? []).map((r) => r.counter_entity),
       d.dockError,
       d.volume,
       d.childLock,
