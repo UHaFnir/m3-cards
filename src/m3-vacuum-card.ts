@@ -22,6 +22,12 @@ import {
   VACUUM_MAP_MAX_ZOOM,
   VACUUM_MAP_RADIUS,
   VACUUM_MAP_SAMPLE_PX,
+  VACUUM_CLEAN_MODE_ICONS,
+  VACUUM_MODE_ROW_HEIGHT,
+  VACUUM_MODE_ROW_RADIUS,
+  VACUUM_PICK_OPTION_HEIGHT,
+  VACUUM_PICK_OPTION_RADIUS,
+  VACUUM_PICK_SHEET_RADIUS,
   VACUUM_MAX_CHIPS,
   VACUUM_BATTERY_HEIGHT,
   VACUUM_BATTERY_LOW,
@@ -130,6 +136,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   /** Only ever off identity inside the map dialog; the card's own map is flat. */
   @state() private _mapView: PanZoomState = { ...PAN_ZOOM_IDENTITY };
   @state() private _mapOpen = false;
+  /** The select whose options are being picked, while the menu is open. */
+  @state() private _picker?: { entityId: string; title: string; prefix: string };
   private _mapOpenedAt = 0;
   /** `object-view-box` cropping the map to its floor plan, and the src it is for. */
   @state() private _mapInset?: string;
@@ -266,6 +274,10 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     syncDialogOpenState(
       this.renderRoot?.querySelector("dialog.map-dialog") as HTMLDialogElement | null,
       this._mapOpen,
+    );
+    syncDialogOpenState(
+      this.renderRoot?.querySelector("dialog.pick-dialog") as HTMLDialogElement | null,
+      this._picker !== undefined,
     );
     if (!this._config?.collapsible) return;
     // An entity-backed fold can be changed from another dashboard or by an
@@ -462,12 +474,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     const colors = resolveCommonColors(this._config);
     // A configured accent pins the card to one colour; without one the state
     // is the colour, which is the whole point of the header.
-    const ruleColor = this._stateRule()?.color;
-    const accent = this._config.accent_color
-      ? resolveThemeColor(this._config.accent_color)
-      : ruleColor
-        ? resolveThemeColor(ruleColor)
-        : activityColor(activity);
+    const accent = this._accent(activity);
     const radius = `${this._config.radius ?? DEFAULT_VACUUM_RADIUS}px`;
     // The state, the battery and Start/Pause never fold: they are what the
     // card is for at a glance. Of what is below them, the fold hides whatever
@@ -507,6 +514,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
                 state.attributes.fan_speed as string | undefined,
                 unavailable,
               )}
+          ${hidden("cleaning_mode") ? nothing : this._renderCleaningMode(unavailable)}
           ${hidden("mop")
             ? nothing
             : html`
@@ -536,6 +544,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       </ha-card>
       ${this._renderPopup()}
       ${this._renderMapDialog()}
+      ${this._renderPickerDialog()}
     `;
   }
 
@@ -1155,6 +1164,120 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     `;
   }
 
+  /**
+   * What the next run will do: vacuum, mop, or both.
+   *
+   * A menu, not a scale, and that is the whole point of it being separate from
+   * the two rows below. Mop intensity and route are three strengths of one
+   * thing, so a slider reads them correctly; vacuum / mop / both are three
+   * different jobs, and sliding from "vacuum" to "mop" through "both" says
+   * something about them that is not true. The vacuum's own app asks this
+   * question with a menu too.
+   *
+   * It only sets what the machine will do next — nothing here starts anything.
+   * Starting stays with the one button that says Start.
+   */
+  private _renderCleaningMode(unavailable: boolean) {
+    if (this._config?.show_cleaning_mode === false) return nothing;
+    const entityId = this._entity("cleaning_mode_entity", "cleaningMode");
+    if (!entityId) return nothing;
+    const state = this.hass?.states[entityId];
+    const options = state?.attributes.options as string[] | undefined;
+    if (!options || options.length < 2) return nothing;
+    const current = this._selectOptimistic[entityId] ?? state!.state;
+
+    return html`
+      <button
+        class="mode-row"
+        ?disabled=${unavailable}
+        aria-haspopup="dialog"
+        @click=${() =>
+          (this._picker = {
+            entityId,
+            title: this._t("vacuum_cleaning_mode"),
+            prefix: "vacuum_clean_",
+          })}
+      >
+        <ha-icon icon=${VACUUM_CLEAN_MODE_ICONS[current] ?? "mdi:tune-variant"}></ha-icon>
+        <span class="mode-label">${this._t("vacuum_cleaning_mode")}</span>
+        <span class="mode-value">${this._optionLabel("vacuum_clean_", current)}</span>
+        <ha-icon class="mode-chevron" icon="mdi:chevron-right"></ha-icon>
+      </button>
+    `;
+  }
+
+  /**
+   * The card's accent: a configured colour, then a matching state rule, then
+   * the activity's own colour.
+   *
+   * Lifted out of render() because a modal dialog needs it too — one painted in
+   * the top layer sits outside `ha-card`, so the variables set inline there do
+   * not reach it and it has to be given the colour directly.
+   */
+  private _accent(activity: VacuumActivity): string {
+    if (this._config?.accent_color) return resolveThemeColor(this._config.accent_color);
+    const ruleColor = this._stateRule()?.color;
+    return ruleColor ? resolveThemeColor(ruleColor) : activityColor(activity);
+  }
+
+  /** An option's word: the suite's translation, or the integration's own. */
+  private _optionLabel(prefix: string, value: string): string {
+    const key = `${prefix}${value}` as TranslationKey;
+    const text = this._t(key);
+    // localize() hands back the key itself when it has no translation, which is
+    // the signal to show whatever the integration called it.
+    return text === key ? value : text;
+  }
+
+  private _renderPickerDialog() {
+    const picker = this._picker;
+    if (!picker) return nothing;
+    const state = this.hass?.states[picker.entityId];
+    const options = (state?.attributes.options as string[] | undefined) ?? [];
+    const current = this._selectOptimistic[picker.entityId] ?? state?.state;
+
+    return html`
+      <dialog
+        class="pick-dialog"
+        @close=${() => {
+          this._picker = undefined;
+        }}
+        @click=${(e: Event) => {
+          if (e.target === e.currentTarget) this._picker = undefined;
+        }}
+      >
+        <div
+          class="pick-sheet"
+          style=${(() => {
+            const accent = this._accent(this._activity().activity);
+            return `--m3v-accent: ${accent}; --m3v-ink: ${inkOn(accent, this)};`;
+          })()}
+        >
+          <h2 class="pick-title">${picker.title}</h2>
+          ${options.map(
+            (option) => html`
+              <button
+                class="pick-option ${option === current ? "current" : ""}"
+                @click=${() => {
+                  this._selectOption(picker.entityId, option);
+                  this._picker = undefined;
+                }}
+              >
+                <ha-icon
+                  icon=${VACUUM_CLEAN_MODE_ICONS[option] ?? "mdi:circle-medium"}
+                ></ha-icon>
+                <span>${this._optionLabel(picker.prefix, option)}</span>
+                ${option === current
+                  ? html`<ha-icon class="pick-tick" icon="mdi:check"></ha-icon>`
+                  : nothing}
+              </button>
+            `,
+          )}
+        </div>
+      </dialog>
+    `;
+  }
+
   private _selectOption(entityId: string, option: string): void {
     this._selectOptimistic = { ...this._selectOptimistic, [entityId]: option };
     const timers = this._selectTimers;
@@ -1642,6 +1765,112 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         position: absolute;
         bottom: 8px;
         right: 8px;
+      }
+
+      /* ---- cleaning mode -------------------------------------------------- */
+
+      .mode-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: ${unsafeCSS(VACUUM_MODE_ROW_HEIGHT)}px;
+        padding: 0 14px;
+        box-sizing: border-box;
+        border: none;
+        border-radius: ${unsafeCSS(VACUUM_MODE_ROW_RADIUS)}px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--m3p-text, var(--primary-text-color));
+        background: color-mix(in srgb, var(--m3p-text, currentColor) 6%, transparent);
+        --mdc-icon-size: 20px;
+        transition: border-radius ${unsafeCSS(STANDARD_EASING)};
+      }
+
+      .mode-row:active {
+        border-radius: ${unsafeCSS(Math.round(VACUUM_MODE_ROW_RADIUS / 2))}px;
+      }
+
+      .mode-row[disabled] {
+        opacity: ${unsafeCSS(VACUUM_PENDING_OPACITY)};
+        cursor: default;
+      }
+
+      .mode-label {
+        flex: 1;
+        text-align: left;
+        opacity: 0.7;
+      }
+
+      .mode-value {
+        font-weight: 700;
+        color: var(--m3v-accent);
+      }
+
+      .mode-chevron {
+        opacity: 0.5;
+        --mdc-icon-size: 18px;
+      }
+
+      /* ---- the option menu ------------------------------------------------ */
+
+      dialog.pick-dialog {
+        border: none;
+        padding: 0;
+        background: transparent;
+        max-width: min(420px, 92vw);
+        width: 100%;
+      }
+
+      dialog.pick-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(2px);
+      }
+
+      .pick-sheet {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 18px;
+        border-radius: ${unsafeCSS(VACUUM_PICK_SHEET_RADIUS)}px;
+        background: var(--ha-card-background, var(--card-background-color));
+        color: var(--primary-text-color);
+      }
+
+      .pick-title {
+        margin: 2px 4px 8px;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .pick-option {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: ${unsafeCSS(VACUUM_PICK_OPTION_HEIGHT)}px;
+        padding: 0 14px;
+        border: none;
+        border-radius: ${unsafeCSS(VACUUM_PICK_OPTION_RADIUS)}px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 15px;
+        text-align: left;
+        color: inherit;
+        background: color-mix(in srgb, currentColor 6%, transparent);
+        --mdc-icon-size: 22px;
+      }
+
+      .pick-option span {
+        flex: 1;
+      }
+
+      /* The one in force is filled, the rest are quiet — the same rule the
+         chips follow, so "this is the state" never reads as "press this". */
+      .pick-option.current {
+        background: var(--m3v-accent);
+        color: var(--m3v-ink);
+        font-weight: 700;
       }
 
       /* ---- the enlarged map ---------------------------------------------- */

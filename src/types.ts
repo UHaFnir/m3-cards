@@ -753,6 +753,7 @@ export type WeatherChipType =
  */
 export interface VacuumEntityOverrides {
   map_entity?: string;
+  cleaning_mode_entity?: string;
   mop_mode_entity?: string;
   mop_intensity_entity?: string;
   empty_mode_entity?: string;
@@ -837,6 +838,12 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigB
    */
   rooms?: string[];
   show_fan_speed?: boolean;
+  /**
+   * The cleaning-mode row: vacuum only, mop only, or both. A menu rather than
+   * a scale — its options are three different jobs, not three strengths of one,
+   * and the vacuum's own app asks the same question the same way.
+   */
+  show_cleaning_mode?: boolean;
   show_mop_intensity?: boolean;
   show_mop_mode?: boolean;
   show_station_chips?: boolean;
@@ -986,7 +993,14 @@ export interface VacuumPopupConfig {
 }
 
 /** The foldable parts of the control card, below the primary buttons. */
-export type VacuumBlock = "map" | "rooms" | "fan_speed" | "mop" | "buttons" | "chips";
+export type VacuumBlock =
+  | "map"
+  | "rooms"
+  | "fan_speed"
+  | "cleaning_mode"
+  | "mop"
+  | "buttons"
+  | "chips";
 
 export type VacuumSecondaryAction = "return_to_base" | "locate" | "rooms" | "stop";
 

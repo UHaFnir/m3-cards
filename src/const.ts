@@ -2171,6 +2171,25 @@ export const VACUUM_PART_MAX_HOURS: Record<string, number> = {
 export const VACUUM_MAP_SAMPLE_PX = 240;
 
 /**
+ * Icons for the cleaning-mode options, so the menu reads at a glance. Keyed on
+ * the values Roborock reports; anything else falls back to a neutral icon
+ * rather than claiming to know what a vendor's own word means.
+ */
+export const VACUUM_CLEAN_MODE_ICONS: Record<string, string> = {
+  vacuum: "mdi:robot-vacuum",
+  mop: "mdi:water",
+  vac_and_mop: "mdi:vacuum",
+  vacmop: "mdi:vacuum",
+  custom: "mdi:tune-variant",
+};
+
+export const VACUUM_MODE_ROW_HEIGHT = 48;
+export const VACUUM_MODE_ROW_RADIUS = 16;
+export const VACUUM_PICK_SHEET_RADIUS = 28;
+export const VACUUM_PICK_OPTION_HEIGHT = 52;
+export const VACUUM_PICK_OPTION_RADIUS = 16;
+
+/**
  * The range of the `input_number` the editor creates for a reminder.
  *
  * It holds a *meter reading* — the lifetime run count, or hours of runtime, at

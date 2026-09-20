@@ -104,6 +104,20 @@ to `stopSwipe`, so `hass-swipe-navigation` does not read a sideways drag as
 "next view". The CSS stops the browser, the shield stops the plugin's own
 listeners.
 
+## Vacuum, mop, or both
+
+The cleaning mode is a **menu**, not a scale, and that is deliberate. Mop
+intensity and route are three strengths of one thing, so a slider reads them
+correctly. Vacuum / mop / both are three different jobs, and sliding from
+"vacuum" to "mop" through "both" says something about them that is not true —
+the machine's own app asks this question with a menu too.
+
+The row shows what the next run will do and opens the menu on a tap. Picking an
+option sets the `select` and **starts nothing**: a vacuum leaves on one button,
+the one that says Start. The card looks for `cleaning_mode` on the vacuum's
+device; `cleaning_mode_entity` names it outright, and `show_cleaning_mode:
+false` leaves it out.
+
 ## Folding it away
 
 `collapsible: true` gives the header a chevron that folds the map, the scales,
@@ -235,6 +249,8 @@ something.
 | `buttons_wrap`, `buttons_stretch`, `buttons_justify` | — | wrap | Layout of that row, as on the chip-buttons card. |
 | `popup` | object | — | A popup with any card inside: `content`, optional `title` and `size` (`normal`, `wide`, `fullscreen`). A tap on the header opens it. |
 | `show_fan_speed` | boolean | `true` | The suction row. Hidden anyway when the vacuum reports fewer than two speeds. |
+| `show_cleaning_mode` | boolean | `true` | The cleaning-mode row — vacuum, mop, or both — as a menu. Hidden when the vacuum has no such select. |
+| `cleaning_mode_entity` | string | discovered | Names the cleaning-mode `select` when discovery cannot. |
 | `secondary_actions` | list | `[return_to_base, locate]` | The two buttons beside the primary one: `return_to_base`, `locate`, `stop`. |
 | `optimistic_timeout` | number | `70000` | How long, in milliseconds, a tapped state is shown before the card stops waiting for confirmation. |
 | `status_entity` | string | discovered | The status sensor whose text the header shows. |

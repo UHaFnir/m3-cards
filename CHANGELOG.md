@@ -25,6 +25,12 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   disconnection overrides a standing guess at once: that is the one thing a user
   must not be kept from seeing for the sake of a smooth animation.
 
+  **The cleaning mode is a menu**, because vacuum, mop and both are three
+  different jobs rather than three strengths of one — sliding between them
+  through "both" would say something untrue about them, and the machine's own
+  app asks with a menu too. Picking one sets what the next run will do and
+  starts nothing: a vacuum leaves on the one button that says Start.
+
   **Rooms are chips**, built from the `area` selector of `vacuum.clean_area` and
   offered only when the vacuum's `supported_features` actually carries the bit
   for it — a card that offers a button the machine cannot honour is worse than
