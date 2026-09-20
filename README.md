@@ -4939,6 +4939,8 @@ A 3D printer spends most of its life idle, and a dashboard built from one tile
 per sensor spends most of its life saying "unavailable" sixteen times. This
 card is the other approach: **the state decides what is drawn.**
 
+<img src="docs/images/printer-card.png" alt="Printer Card" width="440">
+
 ```yaml
 type: custom:m3-printer-card
 entity: sensor.p1s_print_status
