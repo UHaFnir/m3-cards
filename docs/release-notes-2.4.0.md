@@ -30,11 +30,17 @@ The suite registers 44 cards.
   pushes nothing; a tap that changed nothing for half a minute read as a broken
   button. Rooms are chips built from `vacuum.clean_area`, offered only when the
   machine's capability bits say it can honour them. Suction and mop get the
-  suite's Expressive sliders. The map is a plain picture on the card, with a
-  magnifier that opens it full-screen — pinching it in place would have needed
-  the same touch handling that stops the dashboard scrolling past it. The dock
-  is discovered as the separate device it is — without that the card loses the
-  tanks, the dust emptying and the mop washing.
+  suite's Expressive sliders, and the cleaning mode — vacuum, mop or both — a
+  menu, because those are three different jobs rather than three strengths of
+  one; picking one sets what the next run will do and starts nothing.
+
+  The map is cropped to the floor plan: Roborock sends a picture of the robot's
+  whole coordinate space, in which a flat fills a corner, so an uncropped map
+  arrives as a stamp in the middle of the box. It is a plain picture on the
+  card with a magnifier that opens it full-screen — pinching it where it sits
+  would have needed the same touch handling that stops the dashboard scrolling
+  past it. The dock is discovered as the separate device it is — without that
+  the card loses the tanks, the dust emptying and the mop washing.
 
 - **M3 Vacuum Maintenance Card** (`m3-vacuum-maintenance-card`) — filters,
   brushes, sensors and mop with the life they have left, plus **reminders for
@@ -100,10 +106,22 @@ The suite registers 44 cards.
 
 ### Fixed
 
+- **A thermostat in Auto showed one setpoint or none.** In heat/cool a climate
+  entity holds `target_temp_low` and `target_temp_high` and no `temperature`,
+  and both climate cards read `temperature` — so the mini showed nothing and
+  the full card fell back to `target_temp_high`, which looks like a single
+  setpoint and is silently the top of a band. Both now show the band: the full
+  card stacks its stepper row twice, the mini prints both numbers and lets its
+  one pair of buttons act on whichever is lit. A single-setpoint thermostat is
+  unchanged. Thanks to **@enotbay** for reporting both (#21, #22) — neither of
+  us has a thermostat with a band, so a confirmation on the issues is welcome.
+
 - **Closing a card's dialog no longer scrolls the dashboard away.** It jumped to
   whatever had focus last — on a phone, often a slider tapped minutes earlier —
-  because a tap on a card's header does not move focus there. The card now takes
-  focus before it opens a dialog, so closing it leaves you where you were.
+  because a tap on a card's header does not move focus there. The anchor aims
+  at the element the finger actually went down on — a card is most of a phone
+  screen, and parking focus on the card itself moved the page by the card's own
+  height — so closing a dialog now leaves you exactly where you were.
 
 ### Behaviour changes
 
