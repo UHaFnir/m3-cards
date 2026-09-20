@@ -271,6 +271,8 @@ export interface DiscoveredVacuum {
   lastCleanEnd?: string;
   /** Consumables, keyed by part. */
   consumables: Record<string, string>;
+  /** The button that zeroes a part's counter, keyed by the same part. */
+  resets: Record<string, string>;
   /** Dock and mop binary sensors, keyed by meaning. */
   binary: Record<string, string>;
   /** Dock switches, keyed by meaning. */
@@ -322,6 +324,32 @@ const CONSUMABLE_KEYS: Record<string, string[]> = {
   ],
 };
 
+// The buttons that zero a consumable's counter after the part has been
+// changed. Home Assistant ships all of Roborock's **disabled**, so an instance
+// where nobody has enabled them discovers none of these — which is not the
+// same as the vendor having none, and the card says so rather than guessing.
+//
+// Unlike the sensor lists above, these were not read off a live device: the
+// author's buttons are disabled. Each entry therefore leads with the key the
+// integration declares and keeps the plausible spellings behind it.
+const RESET_KEYS: Record<string, string[]> = {
+  main_brush: ["reset_main_brush_consumable", "reset_main_brush", "main_brush_reset"],
+  side_brush: ["reset_side_brush_consumable", "reset_side_brush", "side_brush_reset"],
+  filter: [
+    "reset_air_filter_consumable",
+    "reset_filter_consumable",
+    "reset_filter",
+    "filter_reset",
+  ],
+  sensor: ["reset_sensor_consumable", "reset_sensor", "sensor_reset"],
+  strainer: ["reset_strainer_consumable", "reset_strainer", "strainer_reset"],
+  maintenance_brush: [
+    "reset_cleaning_brush_consumable",
+    "reset_maintenance_brush_consumable",
+    "cleaning_brush_reset",
+  ],
+};
+
 const BINARY_KEYS: Record<string, string[]> = {
   cleaning: ["in_cleaning", "cleaning"],
   mop_attached: ["mop_attached"],
@@ -354,7 +382,13 @@ const TOTAL_KEYS: Record<string, string[]> = {
  * everything the maintenance card exists to show.
  */
 export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): DiscoveredVacuum {
-  const found: DiscoveredVacuum = { consumables: {}, binary: {}, switches: {}, totals: {} };
+  const found: DiscoveredVacuum = {
+    consumables: {},
+    resets: {},
+    binary: {},
+    switches: {},
+    totals: {},
+  };
   const registry = hass.entities as unknown as Record<string, RegistryEntry> | undefined;
   if (!registry) return found;
 
@@ -406,6 +440,10 @@ export function discoverVacuum(hass: HomeAssistant, vacuumEntityId: string): Dis
   for (const [part, keys] of Object.entries(CONSUMABLE_KEYS)) {
     const hit = pick("sensor", keys);
     if (hit) found.consumables[part] = hit;
+  }
+  for (const [part, keys] of Object.entries(RESET_KEYS)) {
+    const hit = pick("button", keys);
+    if (hit) found.resets[part] = hit;
   }
   for (const [what, keys] of Object.entries(BINARY_KEYS)) {
     const hit = pick("binary_sensor", keys);

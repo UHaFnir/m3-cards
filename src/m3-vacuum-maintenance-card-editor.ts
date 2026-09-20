@@ -1,4 +1,4 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
@@ -9,6 +9,8 @@ import type {
 import {
   DEFAULT_VACUUM_MAINT_ICON,
   DEFAULT_VACUUM_RADIUS,
+  VACUUM_COUNTER_MAX,
+  VACUUM_COUNTER_WAIT_MS,
   VACUUM_PART_ALERT_BELOW,
   VACUUM_PART_WARN_BELOW,
 } from "./const";
@@ -46,6 +48,9 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
   @state() private _notifyBusy = false;
   @state() private _notifyStatus: "idle" | "success" | "error" = "idle";
   @state() private _notifyDetail = "";
+  /** Which reminder's helper is being created, and what went wrong if it did. */
+  @state() private _counterBusy?: number;
+  @state() private _counterError = "";
   @state() private _appearance: AppearanceState = {
     showCustomRadius: false,
     showCorners: false,
@@ -102,6 +107,94 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
         { name: this._t("vacuum_reminders"), every_runs: 3 },
       ],
     });
+  }
+
+  /**
+   * Creates the `input_number` a reminder needs in order to be resettable, and
+   * wires it into that reminder in one step.
+   *
+   * WHY THE EDITOR DOES THIS AT ALL
+   *
+   * Without a helper there is nowhere to write "changed it today", so the
+   * reminder can only speak up on every multiple of its interval and can never
+   * be ticked off — which is the half of the feature people actually want.
+   * Getting one by hand means Settings → Devices & services → Helpers, an
+   * `input_number` with a range nobody can guess, and then back here to pick
+   * it: three screens for one number, and the step where this was being given
+   * up on.
+   *
+   * The new helper starts at the meter's *current* reading rather than at
+   * zero. A helper at zero would mean "last done when the machine was new",
+   * so a vacuum with 400 runs behind it would report a mop 397 runs overdue
+   * the moment the helper appeared.
+   */
+  private async _createCounter(index: number): Promise<void> {
+    const cfg = this._config;
+    const reminder = cfg?.reminders?.[index];
+    if (!cfg || !reminder || !this.hass) return;
+    this._counterBusy = index;
+    this._counterError = "";
+    try {
+      const name = `${reminder.name || this._t("vacuum_reminders")} — ${this._t("editor_vacuum_counter_suffix")}`;
+      const before = new Set(
+        Object.keys(this.hass.states).filter((e) => e.startsWith("input_number.")),
+      );
+      await this.hass.callWS({
+        type: "input_number/create",
+        name,
+        min: 0,
+        max: VACUUM_COUNTER_MAX,
+        step: 1,
+        mode: "box",
+        icon: reminder.icon ?? "mdi:calendar-refresh-outline",
+      });
+
+      // The create call answers with the collection item, whose `id` is not
+      // the entity id — that is generated from the name, and only once the
+      // entity has been added. So the new one is waited for rather than
+      // guessed at, and matched by friendly name in case the slug collided
+      // with an existing helper and picked up a `_2`.
+      const entityId = await this._awaitNewHelper(before, name);
+      if (!entityId) {
+        this._counterError = this._t("editor_vacuum_counter_failed");
+        return;
+      }
+
+      // Start the count from where the machine is now.
+      const totals = discoverVacuum(this.hass, cfg.entity).totals;
+      const meterId = reminder.every_hours ? totals.total_time : totals.total_count;
+      const meter = parseFloat(this.hass.states[meterId ?? ""]?.state ?? "");
+      if (!isNaN(meter)) {
+        await this.hass.callService("input_number", "set_value", {
+          entity_id: entityId,
+          value: Math.floor(meter),
+        });
+      }
+
+      const list = [...(cfg.reminders ?? [])];
+      list[index] = { ...reminder, counter_entity: entityId };
+      this._emit({ ...cfg, reminders: list });
+    } catch (err) {
+      this._counterError = err instanceof Error ? err.message : String(err);
+    } finally {
+      this._counterBusy = undefined;
+    }
+  }
+
+  /** Polls `hass.states` for the helper just created. */
+  private async _awaitNewHelper(before: Set<string>, name: string): Promise<string | undefined> {
+    const deadline = Date.now() + VACUUM_COUNTER_WAIT_MS;
+    while (Date.now() < deadline) {
+      const fresh = Object.keys(this.hass?.states ?? {}).filter(
+        (e) => e.startsWith("input_number.") && !before.has(e),
+      );
+      const byName = fresh.find(
+        (e) => this.hass?.states[e]?.attributes.friendly_name === name,
+      );
+      if (byName ?? fresh[0]) return byName ?? fresh[0];
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return undefined;
   }
 
   private _removeReminder(index: number): void {
@@ -486,6 +579,24 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
                       .computeLabel=${this._computeLabel}
                       @value-changed=${(ev: CustomEvent) => this._reminderChanged(index, ev)}
                     ></ha-form>
+                    ${reminder.counter_entity
+                      ? nothing
+                      : html`
+                          <button
+                            class="add-btn"
+                            ?disabled=${this._counterBusy !== undefined}
+                            @click=${() => void this._createCounter(index)}
+                          >
+                            <ha-icon icon="mdi:counter"></ha-icon>
+                            ${this._counterBusy === index
+                              ? this._t("editor_vacuum_counter_creating")
+                              : this._t("editor_vacuum_counter_create")}
+                          </button>
+                          <div class="hint">${this._t("editor_vacuum_counter_create_hint")}</div>
+                        `}
+                    ${this._counterError
+                      ? html`<div class="hint error">${this._counterError}</div>`
+                      : nothing}
                     <button class="remove-btn" @click=${() => this._removeReminder(index)}>
                       ${this._t("editor_appliance_remove")}
                     </button>
@@ -557,7 +668,45 @@ export class M3VacuumMaintenanceCardEditor extends LitElement implements Lovelac
     `;
   }
 
-  static styles = [editorStyles, notifyStyles];
+  static styles = [
+    editorStyles,
+    notifyStyles,
+    // This editor's three list buttons — add a reminder, create its helper,
+    // remove it — were carrying classes nothing styled, so they rendered as
+    // bare browser buttons inside an otherwise Material form.
+    css`
+      .add-btn,
+      .remove-btn {
+        width: 100%;
+        height: 40px;
+        border: none;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--primary-text-color) 8%, transparent);
+        color: var(--primary-text-color);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+
+      .add-btn[disabled] {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      .remove-btn {
+        color: var(--error-color, #e57368);
+      }
+
+      .hint.error {
+        color: var(--error-color, #e57368);
+        opacity: 0.9;
+      }
+    `,
+  ];
 }
 
 declare global {

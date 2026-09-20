@@ -2163,6 +2163,19 @@ export const VACUUM_PART_MAX_HOURS: Record<string, number> = {
   maintenance_brush: 300,
 };
 
+/**
+ * The range of the `input_number` the editor creates for a reminder.
+ *
+ * It holds a *meter reading* — the lifetime run count, or hours of runtime, at
+ * the moment the chore was last ticked off — not a count of anything itself.
+ * So the ceiling has to clear whatever the machine will ever report: a vacuum
+ * that has run four thousand times is a vacuum three years old, and hours of
+ * runtime pass the same mark sooner.
+ */
+export const VACUUM_COUNTER_MAX = 100000;
+/** How long the editor waits for a freshly created helper to turn up. */
+export const VACUUM_COUNTER_WAIT_MS = 4000;
+
 export const VACUUM_STATION_TILE_PADDING = 11;
 export const VACUUM_STATION_TILE_RADIUS = 18;
 export const VACUUM_STATION_TILE_RADIUS_ACTIVE = 11;

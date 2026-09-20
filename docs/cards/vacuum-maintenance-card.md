@@ -53,10 +53,19 @@ A part past its life reports a negative number of hours. That reads as
 
 ## About the reset buttons
 
-Home Assistant ships Roborock's six consumable-reset buttons **disabled**. The
-card cannot press what does not exist, so `show_reset` is off by default and the
-reset stays unavailable until the button is enabled under *Settings → Devices →
-Entities*.
+`show_reset: true` puts a small **reset** button at the end of every part row.
+Pressing it asks first — the counter will read "new part" whether or not one was
+fitted, and there is no undo — and then presses Home Assistant's own reset
+button for that consumable.
+
+Home Assistant ships Roborock's consumable-reset buttons **disabled**, and a
+disabled entity is not in the frontend's registry at all, so the card cannot
+tell "disabled" from "this vendor has none". Either way there is nothing to
+press: the icon is drawn greyed with the reason on it, rather than left out.
+Enable the buttons under *Settings → Devices → Entities* and it lights up.
+
+The option is off by default, because a row of reset buttons is a row of
+irreversible ones.
 
 ## Reminders for what the vacuum does not count
 
@@ -79,10 +88,18 @@ to set up, and nothing to acknowledge: change the mop after two runs and it will
 still say so on the third.
 
 **With `counter_entity`** — an `input_number` holding the meter reading at the
-last acknowledgement — it becomes a real *"2 runs ago"*, a **Done** button
-appears on the row, and the state lives in Home Assistant rather than in one
-browser. Create the helper under *Settings → Devices & services → Helpers*, with
-a range wide enough for the lifetime count.
+last acknowledgement — it becomes a real *"2 runs ago"*, the row can be ticked
+off, and the state lives in Home Assistant rather than in one browser. The
+reminder's editor has **Create counter helper**: it makes the `input_number`,
+fills it in here and sets it to today's meter reading, which is the one value
+that must not be left at zero — a helper at zero means "last done when the
+machine was new", so a vacuum with 400 runs behind it would report the mop 397
+runs overdue. (By hand it is *Settings → Devices & services → Helpers*, with a
+range wide enough for the lifetime count.)
+
+The tick-off is not only for a reminder that has come due: a mop changed after
+two of its three runs still wants the count to start again. Due, the row carries
+a **Done** button; before that, a quiet reset icon sits beside the figure.
 
 `every_hours` counts against total runtime instead; if both are given, hours
 wins.
@@ -141,7 +158,7 @@ everything below the header.
 | `show_station` | boolean | `true` | The dock action tiles. |
 | `show_stats` | boolean | `true` | Runtime, area and run count. |
 | `show_settings` | boolean | `false` | Child lock, do-not-disturb and volume. |
-| `show_reset` | boolean | `false` | Long-press a part to reset its counter. See above. |
+| `show_reset` | boolean | `false` | A reset button on every part row, behind a confirmation. See above. |
 | `collapsible`, `default_collapsed`, `collapse_state_entity`, `collapse_memory` | — | — | Folds the blocks below the header, as on the room and heading cards. |
 | `collapse_blocks` | list | all | Which blocks the fold hides: `parts`, `reminders`, `station`, `stats`, `settings`. Left out, it hides all of them. |
 | `notify_enabled`, `notify_service`, `notify_time`, `notify_title`, `notify_message` | — | — | The notification above. Off until switched on. |

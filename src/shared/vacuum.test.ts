@@ -229,6 +229,31 @@ describe("discoverVacuum", () => {
     expect(Object.keys(discoverVacuum(hass, "vacuum.sushi").consumables)).toHaveLength(0);
   });
 
+  it("finds the buttons that zero a consumable's counter", () => {
+    const hass = fakeHass({
+      "vacuum.sushi": { device_id: "dev1" },
+      "button.sushi_reset_main_brush_consumable": {
+        device_id: "dev1",
+        translation_key: "reset_main_brush_consumable",
+      },
+      "button.sushi_reset_air_filter_consumable": {
+        device_id: "dev1",
+        translation_key: "reset_air_filter_consumable",
+      },
+    });
+    const found = discoverVacuum(hass, "vacuum.sushi");
+    expect(found.resets.main_brush).toBe("button.sushi_reset_main_brush_consumable");
+    expect(found.resets.filter).toBe("button.sushi_reset_air_filter_consumable");
+    expect(found.resets.side_brush).toBeUndefined();
+  });
+
+  it("finds no reset while Home Assistant keeps the button disabled", () => {
+    // Which is how it ships them. A disabled entity has no state, and the
+    // card's greyed-out reset icon is drawn off exactly this absence.
+    const hass = fakeHass({ "vacuum.sushi": { device_id: "dev1" } });
+    expect(discoverVacuum(hass, "vacuum.sushi").resets).toEqual({});
+  });
+
   it("returns nothing useful when the vacuum has no device", () => {
     const hass = fakeHass({ "vacuum.sushi": {} });
     const found = discoverVacuum(hass, "vacuum.sushi");

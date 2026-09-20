@@ -39,6 +39,8 @@ import {
 } from "./const";
 import { localize, type TranslationKey } from "./localize";
 import { activateOnKey } from "./shared/a11y";
+import { confirmDialogStyles, renderConfirmDialog, type ConfirmRequest } from "./shared/confirm-dialog";
+import { syncDialogOpenState } from "./shared/popup-card";
 import { STANDARD_EASING } from "./shared/animation";
 import { foldHides, readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
 import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
@@ -78,6 +80,8 @@ export class M3VacuumMaintenanceCard
 
   @state() private _config?: M3VacuumMaintenanceCardConfig;
   @state() private _folded = false;
+  /** The pending "are you sure?", set while a part reset waits for an answer. */
+  @state() private _confirm?: ConfirmRequest;
 
   private _discovered?: DiscoveredVacuum;
   private _discoveredFor?: string;
@@ -156,6 +160,12 @@ export class M3VacuumMaintenanceCard
   };
 
   protected updated(): void {
+    // A native <dialog> is opened imperatively, not by an attribute, so the
+    // pending question and the element's own state are reconciled here.
+    syncDialogOpenState(
+      this.renderRoot.querySelector("dialog.m3-confirm") as HTMLDialogElement | null,
+      this._confirm !== undefined,
+    );
     if (!this._config?.collapsible) return;
     const wanted = readCollapsed(this.hass, this._foldTarget);
     if (wanted !== this._folded) this._folded = wanted;
@@ -325,6 +335,15 @@ export class M3VacuumMaintenanceCard
           ${this._config.card_version ? html`<div class="version">${CARD_VERSION}</div>` : nothing}
         </div>
       </ha-card>
+      <!-- Outside the card, not inside it: the question must not inherit the
+           card's own colour scope or any dimming applied to its children. -->
+      ${renderConfirmDialog({
+        request: this._confirm,
+        host: this,
+        onCancel: () => {
+          this._confirm = undefined;
+        },
+      })}
     `;
   }
 
@@ -408,8 +427,58 @@ export class M3VacuumMaintenanceCard
             : nothing}
         </div>
         <div class="part-value" style=${`color: ${color};`}>${value}</div>
+        ${this._renderPartReset(part, name)}
       </div>
     `;
+  }
+
+  /**
+   * The button that zeroes a part's counter.
+   *
+   * Drawn only when `show_reset` asks for it, because pressing it is a claim
+   * about the physical world: the counter reads "new part" whether or not one
+   * was fitted. Hence the question in front of it — a stray tap on a phone
+   * would otherwise throw away the only record of when the brush was changed.
+   *
+   * Home Assistant ships Roborock's reset buttons **disabled**, so on most
+   * instances there is nothing to press. The icon is then greyed with the
+   * reason on it rather than left out: "where do I reset this" is the question
+   * the option exists to answer, and an empty row answers it with silence.
+   */
+  private _renderPartReset(
+    part: { key: string; entity: string; cfg?: VacuumConsumableConfig },
+    name: string,
+  ) {
+    if (this._config?.show_reset !== true) return nothing;
+    const button = this._entities()?.resets[part.key];
+    const label = button ? this._t("vacuum_reset_part") : this._t("vacuum_reset_disabled");
+    return html`
+      <button
+        class="row-btn"
+        ?disabled=${!button}
+        aria-label=${label}
+        title=${label}
+        @click=${(e: Event) => {
+          e.stopPropagation();
+          if (button) this._askReset(button, name);
+        }}
+      >
+        <ha-icon icon="mdi:restart"></ha-icon>
+      </button>
+    `;
+  }
+
+  private _askReset(button: string, name: string): void {
+    this._confirm = {
+      title: this._t("vacuum_reset_confirm").replace("{part}", name),
+      message: this._t("vacuum_reset_confirm_body"),
+      confirmLabel: this._t("vacuum_reset"),
+      cancelLabel: this._t("vacuum_reset_cancel"),
+      icon: "mdi:restart",
+      onConfirm: () => {
+        this.hass?.callService("button", "press", { entity_id: button });
+      },
+    };
   }
 
   // ---- reminders --------------------------------------------------------------
@@ -482,6 +551,11 @@ export class M3VacuumMaintenanceCard
             ></div>
           </div>
         </div>
+        <!-- Acknowledging is not only for a reminder that has come due. A mop
+             changed after two of its three runs still wants the count to start
+             again, and a chore that can only be ticked off once it nags is a
+             chore the card is wrong about. Due, the button carries the word;
+             before that it is the quiet icon beside the figure. -->
         ${state.acknowledgeable && state.due
           ? html`
               <button
@@ -491,7 +565,21 @@ export class M3VacuumMaintenanceCard
                 ${this._t("vacuum_reminder_done")}
               </button>
             `
-          : html`<div class="part-value" style=${`color: ${color};`}>${value}</div>`}
+          : html`
+              <div class="part-value" style=${`color: ${color};`}>${value}</div>
+              ${state.acknowledgeable
+                ? html`
+                    <button
+                      class="row-btn"
+                      aria-label=${this._t("vacuum_reminder_reset")}
+                      title=${this._t("vacuum_reminder_reset")}
+                      @click=${() => acknowledgeReminder(this.hass, state)}
+                    >
+                      <ha-icon icon="mdi:restart"></ha-icon>
+                    </button>
+                  `
+                : nothing}
+            `}
       </div>
     `;
   }
@@ -622,6 +710,7 @@ export class M3VacuumMaintenanceCard
     glassCardStyles,
     foldArrowStyles,
     cardHeaderStyles,
+    confirmDialogStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -741,6 +830,33 @@ export class M3VacuumMaintenanceCard
         font-size: 11px;
         font-weight: 700;
         cursor: pointer;
+      }
+
+      /* The round control at the end of a part or reminder row. Filled, if
+         quietly: in this suite a filled thing is pressed and an outlined one
+         is read. */
+      .row-btn {
+        flex: 0 0 auto;
+        width: 30px;
+        height: 30px;
+        border: none;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        --mdc-icon-size: 17px;
+        color: var(--m3p-text, var(--primary-text-color));
+        background: color-mix(
+          in srgb,
+          var(--m3p-text, currentColor) ${unsafeCSS(VACUUM_PART_ROW_TINT * 2)}%,
+          transparent
+        );
+      }
+
+      .row-btn[disabled] {
+        opacity: 0.38;
+        cursor: default;
       }
 
       .block-label {

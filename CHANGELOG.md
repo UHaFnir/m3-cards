@@ -32,6 +32,15 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   sliders: a thick track with a gap either side of the handle, stop indicators,
   and a handle that widens under the finger.
 
+  **The map is a picture on the card and a screen of its own.** A Roborock map
+  carries wide transparent margins, so fitting the whole canvas leaves the floor
+  plan a stamp in the middle of it — but pinching it where it sits needs
+  `touch-action: none`, and that swallows the vertical swipe the dashboard
+  scrolls with. The map is the tallest thing on the card, so that left a phone
+  a few pixels beside it to scroll on. The magnifier in its corner opens the
+  picture full-screen instead, and the pinching, dragging and double-tapping
+  happens there, where nothing is behind it to scroll.
+
   **The dock is a second device.** Roborock registers it separately, with
   `via_device_id` and `parent_device_id` both null, tied to the vacuum only by
   the identifier `roborock:<duid>_dock`. Discovery walks it too. Without that the
@@ -52,9 +61,23 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   **And reminders for the chores nothing counts.** "Change the mop every three
   runs" is not a sensor — no integration tracks it, and the vacuum has no idea
   it happened. Give the card a number of runs or hours and it works out when the
-  job is due, shows it as a chip on the card, and can be ticked off there.
-  With an `input_number` helper it counts "runs since" properly; without one it
-  simply speaks up on every multiple, which is enough for a mop.
+  job is due, shows it as a chip on the card, and can be ticked off there — not
+  only once it has come due, because a mop changed after two of its three runs
+  still wants the count to start again.
+
+  Ticking off needs somewhere to write "changed it today", and that is an
+  `input_number`. Rather than send anyone to Helpers to make one with a range
+  they have to guess at, **the reminder's editor creates it**: the helper is
+  made, filled in, and set to today's meter reading — which is the value that
+  must not be left at zero, or a vacuum with four hundred runs behind it reports
+  the mop three hundred and ninety-seven runs overdue.
+
+  **`show_reset` puts a reset button on every part row**, behind a confirmation,
+  because the counter will read "new part" whether or not one was fitted. Home
+  Assistant ships Roborock's consumable resets disabled, and a disabled entity
+  is not in the frontend's registry at all, so the card cannot tell that from a
+  vendor having none: either way there is nothing to press, and the icon is
+  greyed with the reason on it rather than left out.
 
   Both cards can build **real Home Assistant automations from the editor** — a
   part below its warning threshold, a reminder coming due, an error on the

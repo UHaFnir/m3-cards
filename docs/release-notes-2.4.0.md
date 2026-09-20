@@ -30,16 +30,21 @@ The suite registers 44 cards.
   pushes nothing; a tap that changed nothing for half a minute read as a broken
   button. Rooms are chips built from `vacuum.clean_area`, offered only when the
   machine's capability bits say it can honour them. Suction and mop get the
-  suite's Expressive sliders. The dock is discovered as the separate device it
-  is — without that the card loses the tanks, the dust emptying and the mop
-  washing.
+  suite's Expressive sliders. The map is a plain picture on the card, with a
+  magnifier that opens it full-screen — pinching it in place would have needed
+  the same touch handling that stops the dashboard scrolling past it. The dock
+  is discovered as the separate device it is — without that the card loses the
+  tanks, the dust emptying and the mop washing.
 
 - **M3 Vacuum Maintenance Card** (`m3-vacuum-maintenance-card`) — filters,
   brushes, sensors and mop with the life they have left, plus **reminders for
   the chores nothing counts**. "Change the mop every three runs" is not a
   sensor; the card works out when it is due, shows it, and lets it be ticked
-  off. Both vacuum cards can build real Home Assistant automations from their
-  editors.
+  off at any point, not only once it nags. The `input_number` that makes that
+  possible is created by the reminder's own editor, set to today's meter
+  reading. `show_reset` adds a reset button to each part row, behind a
+  confirmation. Both vacuum cards can build real Home Assistant automations
+  from their editors.
 
 - **M3 Printer Card** (`m3-printer-card`) — a 3D printer as one card instead of
   sixteen tiles. Built against Bambu Lab's integration and deliberately not tied

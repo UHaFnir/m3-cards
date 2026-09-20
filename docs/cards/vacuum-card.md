@@ -58,19 +58,23 @@ Without the mapping the service is called and the robot ignores it.
 
 A Roborock map arrives with wide transparent margins baked into the picture, so
 `contain` fits the whole canvas and the floor plan ends up a stamp in the middle
-of it. Rather than crop — which would hide rooms — the map can be **pinched,
-dragged and wheel-zoomed** in place. Double-tap toggles between 1× and 2×, and a
-button appears to go back.
+of it. Rather than crop — which would hide rooms — the map can be enlarged:
+**the magnifier in its bottom corner** opens the picture full-screen, and there
+it pinches, drags and wheel-zooms. Double-tap toggles between 1× and 2×, and a
+second button goes back to 1×.
 
-Two things make that safe on a dashboard. The element takes `touch-action:
-none`, so the browser does not pan the page underneath, and every pointer is
-also handed to `stopSwipe`, so `hass-swipe-navigation` does not read a sideways
-drag on the map as "next view". Both are needed: the CSS stops the browser, the
-shield stops the plugin's own listeners.
+**The card's own map does not take those gestures**, and that is the point of
+the magnifier. Pinching an element needs `touch-action: none` on it, and that
+also swallows the vertical swipe that scrolls the dashboard. The map is the
+tallest thing on this card, so a phone was left with a few pixels beside it to
+scroll on — and the picture sliding under the thumb on every attempt. A tap on
+the card's map still opens more-info, as it always did.
 
-A drag never counts as a tap, so letting go after panning does not also open
-more-info. At 1× a drag is left alone entirely and the dashboard scrolls as it
-always did.
+Inside the full-screen view both shields are in place: `touch-action: none` so
+the browser does not pan anything underneath, and every pointer is also handed
+to `stopSwipe`, so `hass-swipe-navigation` does not read a sideways drag as
+"next view". The CSS stops the browser, the shield stops the plugin's own
+listeners.
 
 ## Folding it away
 
@@ -190,8 +194,8 @@ something.
 | `map_height` | number | `360` | Height of the map preview in px. |
 | `show_rooms` | boolean | `true` | The room chips. |
 | `rooms` | list | — | Home Assistant area ids the vacuum can be sent to, in the order they should be offered. **Required for the block to appear** — see below. |
-| `map_zoom` | boolean | `true` | Pinch, drag and wheel zoom on the map; double-tap toggles 1×/2×. |
-| `map_max_zoom` | number | `4` | How far the pinch may go. |
+| `map_zoom` | boolean | `true` | The magnifier that opens the map full-screen, where it pinches, drags and wheel-zooms. `false` leaves the map a plain picture. |
+| `map_max_zoom` | number | `4` | How far the pinch may go in that view. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. Drawn with a rim and no fill, so they cannot be mistaken for the filled `buttons` above them; only a reminder you can tick off is filled. |

@@ -125,16 +125,14 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   @state() private _popupCardEl?: HTMLElement & PopupCardHandle;
   private _popupOpenedAt = 0;
   private readonly _popupCard = new DetailCardController();
+  /** Only ever off identity inside the map dialog; the card's own map is flat. */
   @state() private _mapView: PanZoomState = { ...PAN_ZOOM_IDENTITY };
+  @state() private _mapOpen = false;
+  private _mapOpenedAt = 0;
   private _mapPanZoom = new PanZoom({
     max: VACUUM_MAP_MAX_ZOOM,
     onChange: (view) => {
       this._mapView = view;
-    },
-    onGestureEnd: (moved) => {
-      // A tap that ended a pan is not a tap. Without this, letting go after
-      // dragging the map would also open more-info.
-      if (!moved) this._mapTapped();
     },
   });
   private _chipGestures = new TapHoldGesture();
@@ -220,10 +218,18 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   protected updated(): void {
     this._maybeSyncPopupCard();
     if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
-    if (this._popupOpen !== undefined) {
-      const dialog = this.renderRoot?.querySelector("dialog") as HTMLDialogElement | null;
-      syncDialogOpenState(dialog, this._popupOpen);
-    }
+    // Two dialogs live in this shadow root — the configured popup and the
+    // enlarged map. Each is addressed by its own selector; a bare
+    // `querySelector("dialog")` would find whichever the render put first and
+    // then open the wrong one.
+    syncDialogOpenState(
+      this.renderRoot?.querySelector("dialog:not(.map-dialog)") as HTMLDialogElement | null,
+      this._popupOpen,
+    );
+    syncDialogOpenState(
+      this.renderRoot?.querySelector("dialog.map-dialog") as HTMLDialogElement | null,
+      this._mapOpen,
+    );
     if (!this._config?.collapsible) return;
     // An entity-backed fold can be changed from another dashboard or by an
     // automation, so it is re-read rather than only written on a tap.
@@ -492,6 +498,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         </div>
       </ha-card>
       ${this._renderPopup()}
+      ${this._renderMapDialog()}
     `;
   }
 
@@ -741,21 +748,14 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   // ---- map ------------------------------------------------------------------
 
   /**
-   * The live map.
-   *
-   * No refresh timer, deliberately. An `image` entity's *state* is the
-   * timestamp of the picture behind it, so keying the URL on that state makes
-   * the browser refetch exactly when there is something new and never
-   * otherwise — which beats the 30-second poll the integration does anyway,
-   * and costs nothing while the card is off screen.
+   * The live map, as it sits on the card: a picture, a chip, and the magnifier
+   * that opens the version you can work. Nothing here takes a gesture — see
+   * `_renderMapDialog` for why.
    */
   private _renderMap() {
     if (this._config?.show_map === false) return nothing;
-    const entityId = this._entity("map_entity", "map");
-    if (!entityId) return nothing;
-    const state = this.hass?.states[entityId];
-    const picture = state?.attributes.entity_picture as string | undefined;
-    if (!picture) return nothing;
+    const source = this._mapSource();
+    if (!source) return nothing;
 
     const area = this._numeric(this._entity("area_entity", "area"));
     const minutes = this._numeric(this._entity("time_entity", "time"));
@@ -765,55 +765,142 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       parts.push(`${formatNumber(this._language, minutes, { maximumFractionDigits: 0 })} min`);
     }
 
-    const zoomable = this._config?.map_zoom !== false;
-    const view = this._mapView;
-
     return html`
       <div
-        class="map ${zoomable ? "zoomable" : ""} ${view.scale > 1.001 ? "zoomed" : ""}"
+        class="map"
         style=${`--m3v-map-height: ${this._config?.map_height ?? VACUUM_MAP_HEIGHT}px;`}
         role="button"
         tabindex="0"
         aria-label=${this._t("vacuum_map")}
-        @keydown=${activateOnKey(() => this._fireMoreInfo(entityId))}
-        @click=${zoomable ? nothing : () => this._fireMoreInfo(entityId)}
-        @dblclick=${zoomable ? () => this._mapPanZoom.toggle() : nothing}
-        @pointerdown=${zoomable ? this._mapPanZoom.onPointerDown : nothing}
-        @pointermove=${zoomable ? this._mapPanZoom.onPointerMove : nothing}
-        @pointerup=${zoomable ? this._mapPanZoom.onPointerUp : nothing}
-        @pointercancel=${zoomable ? this._mapPanZoom.onPointerUp : nothing}
-        @wheel=${zoomable ? this._mapPanZoom.onWheel : nothing}
-        @touchstart=${zoomable ? stopSwipe : nothing}
-        @touchmove=${zoomable ? stopSwipe : nothing}
-        @touchend=${zoomable ? stopSwipe : nothing}
-        @mousedown=${zoomable ? stopSwipe : nothing}
-        @mousemove=${zoomable ? stopSwipe : nothing}
-        @mouseup=${zoomable ? stopSwipe : nothing}
+        @keydown=${activateOnKey(() => this._mapTapped())}
+        @click=${() => this._mapTapped()}
       >
-        <img
-          style=${`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale});`}
-          src=${`${picture}${picture.includes("?") ? "&" : "?"}s=${state!.state}`}
-          alt=""
-        />
+        <img src=${source.src} alt="" />
         ${parts.length
           ? html`<div class="map-chip">${parts.join(" · ")}</div>`
           : nothing}
-        ${view.scale > 1.001
-          ? html`
+        ${this._config?.map_zoom === false
+          ? nothing
+          : html`
               <button
-                class="map-reset"
-                aria-label=${this._t("vacuum_map")}
+                class="map-btn map-zoom"
+                aria-label=${this._t("vacuum_map_zoom")}
+                title=${this._t("vacuum_map_zoom")}
                 @click=${(e: Event) => {
                   e.stopPropagation();
-                  this._mapPanZoom.reset();
+                  this._openMap();
                 }}
               >
-                <ha-icon icon="mdi:magnify-minus-outline"></ha-icon>
+                <ha-icon icon="mdi:magnify-plus-outline"></ha-icon>
               </button>
-            `
-          : nothing}
+            `}
       </div>
     `;
+  }
+
+  /**
+   * The map at full size, and the only place the picture zooms.
+   *
+   * WHY THE CARD'S OWN MAP NO LONGER PINCHES
+   *
+   * Pinch and drag need `touch-action: none` on the element, and that also
+   * swallows the vertical swipe that scrolls the dashboard. On a phone the map
+   * is most of the card's height, so scrolling past it meant hunting for the
+   * few pixels beside it — and the picture shifting under the thumb on every
+   * try. The gestures moved in here, where the picture is the only thing on
+   * screen and there is nothing behind it to scroll. A tap on the card's map
+   * still opens more-info, as it always did.
+   */
+  private _renderMapDialog() {
+    if (!this._mapOpen) return nothing;
+    const source = this._mapSource();
+    if (!source) return nothing;
+    const view = this._mapView;
+
+    return html`
+      <dialog
+        class="map-dialog"
+        @close=${() => this._closeMap()}
+        @click=${(e: Event) => {
+          if (shouldCloseOnBackdropClick(e, this._mapOpenedAt)) this._closeMap();
+        }}
+      >
+        <div
+          class="map-stage ${view.scale > 1.001 ? "zoomed" : ""}"
+          @dblclick=${() => this._mapPanZoom.toggle()}
+          @pointerdown=${this._mapPanZoom.onPointerDown}
+          @pointermove=${this._mapPanZoom.onPointerMove}
+          @pointerup=${this._mapPanZoom.onPointerUp}
+          @pointercancel=${this._mapPanZoom.onPointerUp}
+          @wheel=${this._mapPanZoom.onWheel}
+          @touchstart=${stopSwipe}
+          @touchmove=${stopSwipe}
+          @touchend=${stopSwipe}
+          @mousedown=${stopSwipe}
+          @mousemove=${stopSwipe}
+          @mouseup=${stopSwipe}
+        >
+          <img
+            style=${`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale});`}
+            src=${source.src}
+            alt=""
+          />
+        </div>
+        <div class="map-actions">
+          ${view.scale > 1.001
+            ? html`
+                <button
+                  class="map-btn"
+                  aria-label=${this._t("vacuum_map_reset")}
+                  title=${this._t("vacuum_map_reset")}
+                  @click=${() => this._mapPanZoom.reset()}
+                >
+                  <ha-icon icon="mdi:magnify-minus-outline"></ha-icon>
+                </button>
+              `
+            : nothing}
+          <button
+            class="map-btn"
+            aria-label=${this._t("dialog_close")}
+            title=${this._t("dialog_close")}
+            @click=${() => this._closeMap()}
+          >
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
+        </div>
+      </dialog>
+    `;
+  }
+
+  /**
+   * The picture's URL, cache-keyed on the entity's own state.
+   *
+   * No refresh timer, deliberately. An `image` entity's *state* is the
+   * timestamp of the picture behind it, so keying the URL on that state makes
+   * the browser refetch exactly when there is something new and never
+   * otherwise — which beats the 30-second poll the integration does anyway,
+   * and costs nothing while the card is off screen.
+   */
+  private _mapSource(): { entityId: string; src: string } | undefined {
+    const entityId = this._entity("map_entity", "map");
+    if (!entityId) return undefined;
+    const state = this.hass?.states[entityId];
+    const picture = state?.attributes.entity_picture as string | undefined;
+    if (!picture) return undefined;
+    return { entityId, src: `${picture}${picture.includes("?") ? "&" : "?"}s=${state!.state}` };
+  }
+
+  private _openMap(): void {
+    this._mapPanZoom.reset();
+    this._mapOpen = true;
+    this._mapOpenedAt = Date.now();
+  }
+
+  private _closeMap(): void {
+    this._mapOpen = false;
+    // Reset on the way out rather than on the way in, so the picture is never
+    // briefly drawn at the last gesture's scale while the dialog appears.
+    this._mapPanZoom.reset();
   }
 
   /** The map's own tap, once a gesture has been ruled out. */
@@ -1402,16 +1489,6 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         outline-offset: 2px;
       }
 
-      /* The browser must not pan or pinch the page while the map is being
-         worked; the swipe-navigation plugin is shielded separately, in JS. */
-      .map.zoomable {
-        touch-action: none;
-      }
-
-      .map.zoomed {
-        cursor: grab;
-      }
-
       .map img {
         display: block;
         width: 100%;
@@ -1419,16 +1496,11 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         /* contain, never cover: cropping a floor plan hides rooms, and the
            whole point of the picture is where the vacuum has been. A Roborock
            map brings wide transparent margins of its own, which is what the
-           zoom is for. */
+           magnifier is for. */
         object-fit: contain;
-        transform-origin: center;
-        will-change: transform;
       }
 
-      .map-reset {
-        position: absolute;
-        bottom: 8px;
-        right: 8px;
+      .map-btn {
         width: 34px;
         height: 34px;
         border: none;
@@ -1441,6 +1513,56 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         color: var(--m3p-text, var(--primary-text-color));
         background: color-mix(in srgb, var(--ha-card-background, var(--card-background-color)) 74%, transparent);
         backdrop-filter: blur(6px);
+      }
+
+      .map-zoom {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+      }
+
+      /* ---- the enlarged map ---------------------------------------------- */
+
+      dialog.map-dialog {
+        max-width: 96vw;
+        width: 96vw;
+        max-height: 94dvh;
+        border: none;
+        padding: 0;
+        background: transparent;
+        overflow: visible;
+      }
+
+      /* Only here does the picture take the gestures, and only here may the
+         browser be stopped from panning the page underneath. */
+      .map-stage {
+        position: relative;
+        overflow: hidden;
+        border-radius: ${unsafeCSS(VACUUM_MAP_RADIUS)}px;
+        background: color-mix(in srgb, var(--ha-card-background, var(--card-background-color)) 92%, transparent);
+        line-height: 0;
+        touch-action: none;
+      }
+
+      .map-stage.zoomed {
+        cursor: grab;
+      }
+
+      .map-stage img {
+        display: block;
+        width: 100%;
+        height: min(78dvh, 78vw);
+        object-fit: contain;
+        transform-origin: center;
+        will-change: transform;
+      }
+
+      .map-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 8px;
       }
 
       .map-chip {

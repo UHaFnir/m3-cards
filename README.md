@@ -4491,19 +4491,23 @@ Without the mapping the service is called and the robot ignores it.
 
 A Roborock map arrives with wide transparent margins baked into the picture, so
 `contain` fits the whole canvas and the floor plan ends up a stamp in the middle
-of it. Rather than crop — which would hide rooms — the map can be **pinched,
-dragged and wheel-zoomed** in place. Double-tap toggles between 1× and 2×, and a
-button appears to go back.
+of it. Rather than crop — which would hide rooms — the map can be enlarged:
+**the magnifier in its bottom corner** opens the picture full-screen, and there
+it pinches, drags and wheel-zooms. Double-tap toggles between 1× and 2×, and a
+second button goes back to 1×.
 
-Two things make that safe on a dashboard. The element takes `touch-action:
-none`, so the browser does not pan the page underneath, and every pointer is
-also handed to `stopSwipe`, so `hass-swipe-navigation` does not read a sideways
-drag on the map as "next view". Both are needed: the CSS stops the browser, the
-shield stops the plugin's own listeners.
+**The card's own map does not take those gestures**, and that is the point of
+the magnifier. Pinching an element needs `touch-action: none` on it, and that
+also swallows the vertical swipe that scrolls the dashboard. The map is the
+tallest thing on this card, so a phone was left with a few pixels beside it to
+scroll on — and the picture sliding under the thumb on every attempt. A tap on
+the card's map still opens more-info, as it always did.
 
-A drag never counts as a tap, so letting go after panning does not also open
-more-info. At 1× a drag is left alone entirely and the dashboard scrolls as it
-always did.
+Inside the full-screen view both shields are in place: `touch-action: none` so
+the browser does not pan anything underneath, and every pointer is also handed
+to `stopSwipe`, so `hass-swipe-navigation` does not read a sideways drag as
+"next view". The CSS stops the browser, the shield stops the plugin's own
+listeners.
 
 ## Folding it away
 
@@ -4623,8 +4627,8 @@ something.
 | `map_height` | number | `360` | Height of the map preview in px. |
 | `show_rooms` | boolean | `true` | The room chips. |
 | `rooms` | list | — | Home Assistant area ids the vacuum can be sent to, in the order they should be offered. **Required for the block to appear** — see below. |
-| `map_zoom` | boolean | `true` | Pinch, drag and wheel zoom on the map; double-tap toggles 1×/2×. |
-| `map_max_zoom` | number | `4` | How far the pinch may go. |
+| `map_zoom` | boolean | `true` | The magnifier that opens the map full-screen, where it pinches, drags and wheel-zooms. `false` leaves the map a plain picture. |
+| `map_max_zoom` | number | `4` | How far the pinch may go in that view. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. Drawn with a rim and no fill, so they cannot be mistaken for the filled `buttons` above them; only a reminder you can tick off is filled. |
@@ -4697,10 +4701,19 @@ A part past its life reports a negative number of hours. That reads as
 
 ## About the reset buttons
 
-Home Assistant ships Roborock's six consumable-reset buttons **disabled**. The
-card cannot press what does not exist, so `show_reset` is off by default and the
-reset stays unavailable until the button is enabled under *Settings → Devices →
-Entities*.
+`show_reset: true` puts a small **reset** button at the end of every part row.
+Pressing it asks first — the counter will read "new part" whether or not one was
+fitted, and there is no undo — and then presses Home Assistant's own reset
+button for that consumable.
+
+Home Assistant ships Roborock's consumable-reset buttons **disabled**, and a
+disabled entity is not in the frontend's registry at all, so the card cannot
+tell "disabled" from "this vendor has none". Either way there is nothing to
+press: the icon is drawn greyed with the reason on it, rather than left out.
+Enable the buttons under *Settings → Devices → Entities* and it lights up.
+
+The option is off by default, because a row of reset buttons is a row of
+irreversible ones.
 
 ## Reminders for what the vacuum does not count
 
@@ -4723,10 +4736,18 @@ to set up, and nothing to acknowledge: change the mop after two runs and it will
 still say so on the third.
 
 **With `counter_entity`** — an `input_number` holding the meter reading at the
-last acknowledgement — it becomes a real *"2 runs ago"*, a **Done** button
-appears on the row, and the state lives in Home Assistant rather than in one
-browser. Create the helper under *Settings → Devices & services → Helpers*, with
-a range wide enough for the lifetime count.
+last acknowledgement — it becomes a real *"2 runs ago"*, the row can be ticked
+off, and the state lives in Home Assistant rather than in one browser. The
+reminder's editor has **Create counter helper**: it makes the `input_number`,
+fills it in here and sets it to today's meter reading, which is the one value
+that must not be left at zero — a helper at zero means "last done when the
+machine was new", so a vacuum with 400 runs behind it would report the mop 397
+runs overdue. (By hand it is *Settings → Devices & services → Helpers*, with a
+range wide enough for the lifetime count.)
+
+The tick-off is not only for a reminder that has come due: a mop changed after
+two of its three runs still wants the count to start again. Due, the row carries
+a **Done** button; before that, a quiet reset icon sits beside the figure.
 
 `every_hours` counts against total runtime instead; if both are given, hours
 wins.
@@ -4785,7 +4806,7 @@ everything below the header.
 | `show_station` | boolean | `true` | The dock action tiles. |
 | `show_stats` | boolean | `true` | Runtime, area and run count. |
 | `show_settings` | boolean | `false` | Child lock, do-not-disturb and volume. |
-| `show_reset` | boolean | `false` | Long-press a part to reset its counter. See above. |
+| `show_reset` | boolean | `false` | A reset button on every part row, behind a confirmation. See above. |
 | `collapsible`, `default_collapsed`, `collapse_state_entity`, `collapse_memory` | — | — | Folds the blocks below the header, as on the room and heading cards. |
 | `collapse_blocks` | list | all | Which blocks the fold hides: `parts`, `reminders`, `station`, `stats`, `settings`. Left out, it hides all of them. |
 | `notify_enabled`, `notify_service`, `notify_time`, `notify_title`, `notify_message` | — | — | The notification above. Off until switched on. |
