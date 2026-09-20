@@ -514,7 +514,6 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
                 state.attributes.fan_speed as string | undefined,
                 unavailable,
               )}
-          ${hidden("cleaning_mode") ? nothing : this._renderCleaningMode(unavailable)}
           ${hidden("mop")
             ? nothing
             : html`
@@ -537,6 +536,11 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
               `}
           ${hidden("buttons") ? nothing : this._renderButtons(unavailable)}
           ${hidden("chips") ? nothing : this._renderChips()}
+          <!-- Last, on purpose. It is the one control you set before sending
+               the machine out and then leave alone, so it belongs under the
+               things read at a glance rather than between two sliders that are
+               nudged far more often. -->
+          ${hidden("cleaning_mode") ? nothing : this._renderCleaningMode(unavailable)}
           ${this._config.card_version
             ? html`<div class="version">${CARD_VERSION}</div>`
             : nothing}
@@ -744,9 +748,12 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     const shown = this._fanOptimistic ?? current;
     if (shown && shown !== "off" && shown !== "custom") this._lastRealSpeed = shown;
 
+    // `_optionLabel` rather than a bare lookup: localize() answers with the key
+    // it was given when there is no translation, so a speed the suite has no
+    // word for printed "vacuum_fan_quiet" on the card instead of "quiet".
     const steps: LevelStep[] = scale.map((speed) => {
       const key = fanSpeedKey(speed);
-      return { value: speed, label: key ? this._t(`vacuum_fan_${key}` as TranslationKey) : speed };
+      return { value: speed, label: key ? this._optionLabel("vacuum_fan_", key) : speed };
     });
 
     const hasOff = list.includes("off");

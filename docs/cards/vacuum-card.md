@@ -112,7 +112,12 @@ correctly. Vacuum / mop / both are three different jobs, and sliding from
 "vacuum" to "mop" through "both" says something about them that is not true —
 the machine's own app asks this question with a menu too.
 
-The row shows what the next run will do and opens the menu on a tap. Picking an
+The row sits at the **bottom** of the card, under the sliders and the chips.
+It is the one control you set before sending the machine out and then leave
+alone, so it belongs below the things read at a glance rather than between two
+sliders that get nudged far more often.
+
+It shows what the next run will do and opens the menu on a tap. Picking an
 option sets the `select` and **starts nothing**: a vacuum leaves on one button,
 the one that says Start. The card looks for `cleaning_mode` on the vacuum's
 device; `cleaning_mode_entity` names it outright, and `show_cleaning_mode:
