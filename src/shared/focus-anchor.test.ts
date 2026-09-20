@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { anchorFocus, installFocusAnchor, isInside } from "./focus-anchor";
+import { anchorFocus, anchorTarget, installFocusAnchor, isInside, rememberPointer } from "./focus-anchor";
 
 // No DOM in this test run, so nodes are plain objects with the few properties
 // the module walks: parentNode, and host on a shadow root.
@@ -73,13 +73,58 @@ describe("anchorFocus", () => {
 });
 
 describe("installFocusAnchor", () => {
-  it("registers its listener once, however often the bundle runs it", () => {
+  it("registers its listeners once, however often the bundle runs it", () => {
     const addEventListener = vi.fn();
     const win = { addEventListener } as unknown as Window;
     installFocusAnchor(win);
     installFocusAnchor(win);
-    expect(addEventListener).toHaveBeenCalledOnce();
-    expect(addEventListener.mock.calls[0][0]).toBe("hass-more-info");
-    expect(addEventListener.mock.calls[0][2]).toEqual({ capture: true });
+    // Two: the pointer it remembers the origin from, and the dialog itself.
+    expect(addEventListener).toHaveBeenCalledTimes(2);
+    expect(addEventListener.mock.calls[0][0]).toBe("pointerdown");
+    expect(addEventListener.mock.calls[0][2]).toEqual({ capture: true, passive: true });
+    expect(addEventListener.mock.calls[1][0]).toBe("hass-more-info");
+    expect(addEventListener.mock.calls[1][2]).toEqual({ capture: true });
+  });
+});
+
+describe("anchorTarget", () => {
+  function chipInside(card: Node, connected = true) {
+    const shadow = { parentNode: null, host: card } as unknown as Node;
+    return { parentNode: shadow, isConnected: connected } as unknown as HTMLElement;
+  }
+
+  it("prefers the element the pointer went down on", () => {
+    const { card } = tree();
+    const chip = chipInside(card);
+    rememberPointer(chip);
+    expect(anchorTarget(card as unknown as HTMLElement)).toBe(chip);
+  });
+
+  it("falls back to the card when nothing was pressed", () => {
+    const { card } = tree();
+    rememberPointer(undefined);
+    expect(anchorTarget(card as unknown as HTMLElement)).toBe(card);
+  });
+
+  it("falls back to the card for a pointer from long ago", () => {
+    // An unrelated tap minutes back is not the origin of this dialog.
+    const { card } = tree();
+    rememberPointer(chipInside(card), Date.now() - 60_000);
+    expect(anchorTarget(card as unknown as HTMLElement)).toBe(card);
+  });
+
+  it("falls back to the card for a node the render threw away", () => {
+    // Focusing a detached element does nothing at all, which would leave focus
+    // wherever it was — the very bug this module exists for.
+    const { card } = tree();
+    rememberPointer(chipInside(card, false));
+    expect(anchorTarget(card as unknown as HTMLElement)).toBe(card);
+  });
+
+  it("falls back to the card for a pointer in a different card", () => {
+    const { card, body } = tree();
+    const other = { parentNode: body, isConnected: true } as unknown as HTMLElement;
+    rememberPointer(other);
+    expect(anchorTarget(card as unknown as HTMLElement)).toBe(card);
   });
 });

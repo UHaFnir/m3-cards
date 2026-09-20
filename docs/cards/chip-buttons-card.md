@@ -66,7 +66,7 @@ radius: 28
 | `buttons[].show_state` | boolean | `true` | Show the entity state next to the name |
 | `buttons[].static_color` | boolean | `false` | Always render the chip as "active", regardless of the entity's actual state (e.g. for a status chip that should always stand out) |
 | `buttons[].interactive` | boolean | `true` | `false` turns the chip into a read-only display — no tap/hold handlers, not keyboard-focusable |
-| `buttons[].tap_action` | Action | `more-info` | Tap action, same action picker as every other card |
+| `buttons[].tap_action` | Action | depends on the domain | Tap action, same action picker as every other card. Left out, a script starts, a button or scene is pressed, a switch or light toggles, and anything else opens more-info. |
 | `buttons[].hold_action` | Action | `none` | Long-press action |
 | `buttons[].double_tap_action` | Action | `none` | Double-tap action |
 | `wrap` | boolean | `false` | Wrap chips onto multiple lines instead of scrolling horizontally |

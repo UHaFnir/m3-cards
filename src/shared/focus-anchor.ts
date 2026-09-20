@@ -14,6 +14,16 @@
 //
 // So focus is parked on the opening card first, without scrolling. The dialog
 // then returns it there, which is where the user already is.
+//
+// WHY THE CARD IS NOT PRECISE ENOUGH
+//
+// Anchoring the *card* trades a big jump for a smaller one. A vacuum card is
+// most of a phone screen, and its chip row sits under the map and two sliders;
+// closing a dialog opened from a chip scrolled the card's top edge into view
+// and moved the page by the card's own height — "wir befinden uns bei einer
+// anderen Kachel". So the anchor aims at the element the finger actually hit,
+// remembered from the pointer that preceded the dialog, and falls back to the
+// card when there is nothing better.
 
 /** The element that really has focus, through open shadow roots. */
 export function deepActiveElement(root: Document | ShadowRoot = document): Element | null {
@@ -50,6 +60,39 @@ export function anchorFocus(card: HTMLElement): void {
   card.focus({ preventScroll: true });
 }
 
+/**
+ * How long a remembered pointer stays eligible as an anchor.
+ *
+ * Long enough for a hold gesture and a card that opens its dialog after a
+ * service call, short enough that an unrelated tap minutes ago is never
+ * mistaken for the origin of this dialog.
+ */
+const POINTER_MEMORY_MS = 2000;
+
+let lastPointer: { el: HTMLElement; at: number } | undefined;
+
+/**
+ * The best thing to park focus on for a dialog opened from `card`: whatever
+ * the last pointer went down on inside it, or the card itself.
+ *
+ * Checked for `isConnected` because a card that re-rendered between the tap
+ * and the dialog may have thrown the node away, and focusing a detached
+ * element silently does nothing — leaving focus wherever it was, which is the
+ * bug this whole module exists for.
+ */
+export function anchorTarget(card: HTMLElement): HTMLElement {
+  const remembered = lastPointer;
+  if (!remembered) return card;
+  if (Date.now() - remembered.at > POINTER_MEMORY_MS) return card;
+  if (!remembered.el.isConnected || !isInside(card, remembered.el)) return card;
+  return remembered.el;
+}
+
+/** Records a pointer for `anchorTarget`. Exported for the tests. */
+export function rememberPointer(el: HTMLElement | undefined, now = Date.now()): void {
+  lastPointer = el ? { el, at: now } : undefined;
+}
+
 const INSTALLED = Symbol.for("m3-cards.focus-anchor");
 
 /**
@@ -63,13 +106,25 @@ export function installFocusAnchor(win: Window = window): void {
   const flagged = win as unknown as Record<symbol, boolean>;
   if (flagged[INSTALLED]) return;
   flagged[INSTALLED] = true;
+  // The innermost element a pointer went down on, kept so a dialog can be
+  // anchored to it rather than to the card around it.
+  win.addEventListener(
+    "pointerdown",
+    (event) => {
+      const el = event
+        .composedPath()
+        .find((n): n is HTMLElement => n instanceof HTMLElement);
+      rememberPointer(el);
+    },
+    { capture: true, passive: true },
+  );
   win.addEventListener(
     "hass-more-info",
     (event) => {
       const card = event
         .composedPath()
         .find((n): n is HTMLElement => n instanceof HTMLElement && n.tagName.startsWith("M3-"));
-      if (card) anchorFocus(card);
+      if (card) anchorFocus(anchorTarget(card));
     },
     { capture: true },
   );

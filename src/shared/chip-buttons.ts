@@ -4,6 +4,7 @@ import { STATELESS_DOMAINS, ACTIVE_STATES, CHIP_BUTTON_HEIGHT, CHIP_BUTTON_ICON_
 import { RADIUS } from "./tokens";
 import { resolveThemeColor, tintOn, foregroundOn } from "./color-config";
 import { runHaAction, navigateTo, type RunActionContext } from "./actions";
+import { defaultEntityAction } from "./entity-actions";
 import type { TapHoldGesture } from "./gestures";
 import { stopSwipe } from "./swipe";
 
@@ -125,6 +126,14 @@ function renderChipButton(
     `;
   }
 
+  // Without a configured action the chip does what the entity is for: a script
+  // starts, a button is pressed, a switch toggles, and only something with no
+  // obvious verb opens more-info. `runHaAction` alone would fall back to
+  // more-info for all of them — and a chip labelled "Vollreinigung" that opens
+  // a dialog instead of cleaning is a chip that appears not to work, which is
+  // exactly what `defaultEntityAction` was written for. The button card has
+  // always done this; the chip row was the one place that did not ask.
+  const tap = button.tap_action ?? defaultEntityAction(domain);
   const hasHold = (button.hold_action?.action ?? "none") !== "none";
   const hasDoubleTap = (button.double_tap_action?.action ?? "none") !== "none";
   const ctx: RunActionContext = {
@@ -133,7 +142,7 @@ function renderChipButton(
     navigate: (path) => navigateTo(host, path),
   };
   const listeners = state.gestures.listeners({
-    onTap: () => runHaAction(hass, button.tap_action, ctx),
+    onTap: () => runHaAction(hass, tap, ctx),
     onHold: hasHold ? () => runHaAction(hass, button.hold_action, ctx) : undefined,
     onDoubleTap: hasDoubleTap ? () => runHaAction(hass, button.double_tap_action, ctx) : undefined,
     onPressChange: (pressed) => state.onPressChange(pressed ? key : undefined),

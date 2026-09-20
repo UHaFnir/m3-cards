@@ -420,6 +420,22 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **A chip button with no `tap_action` opened more-info instead of acting.**
+  `runHaAction` falls back to more-info when the config says nothing, and the
+  chip row was the one place that never asked `defaultEntityAction` first — so a
+  chip pointing at a script opened a dialog with a Press button in it rather
+  than running the script. That module's own comment had already named the
+  symptom: "a `button.` entity that opens a dialog instead of pressing is a card
+  that appears not to work."
+
+- **Closing a dialog moved the page by the height of the card that opened it.**
+  The focus anchor added earlier in this release parks focus on the *card*, and
+  a dialog hands focus back on close with the browser scrolling it into view. On
+  a phone a vacuum card is most of the screen and its chips sit at the bottom,
+  so closing a dialog opened from one scrolled the card's top edge into view and
+  landed the reader on a different card. The anchor now aims at the element the
+  pointer actually went down on, and falls back to the card when there is none.
+
 - **Closing a dialog threw the dashboard back up the page.** Open a card's
   details, close them, and the view scrolled — on the test dashboard, 4,318px
   up to a light card three sections higher. A dialog hands focus back on close

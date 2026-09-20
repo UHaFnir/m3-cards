@@ -115,3 +115,10 @@ The suite registers 44 cards.
 - **A chip button for a stateless domain no longer prints a state.** A scene
   showed a timestamp and a script showed "off", neither of which says anything.
   `show_state: true` brings it back for anyone who wants it.
+
+- **A chip button with no `tap_action` now does what its entity is for.** It
+  opened more-info for every domain, so a chip labelled "Vollreinigung" pointing
+  at a script opened a dialog with a Press button in it instead of cleaning.
+  Scripts start, buttons press, switches toggle, and anything without an obvious
+  verb still opens more-info — the mapping the button card has always used.
+  `tap_action: more-info` restores the old behaviour per chip.
