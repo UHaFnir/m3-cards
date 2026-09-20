@@ -68,6 +68,12 @@ export const DEFAULT_BATTERY_THRESHOLD = 20;
 
 export const DEFAULT_TEMP_STEP = 0.5;
 
+// A thermostat in heat/cool holds a band, so the climate card draws two
+// stepper rows instead of one. They are separated by the standard row gap
+// rather than the card's own 10px, so the pair still reads as one control
+// for one target and not as two unrelated rows.
+export const CLIMATE_BAND_ROW_GAP = SPACING.rowGap;
+
 // Curated HA/tile-card-style color tokens. Anything not found here is used
 // verbatim as a CSS color (hex, rgb(), CSS name, var(...), ...).
 export const THEME_COLOR_TOKENS: Record<string, string> = {

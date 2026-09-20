@@ -54,7 +54,6 @@ export function readClimateTarget(attrs: TargetAttributes | undefined): ClimateT
   if (single !== undefined) return { kind: "single", value: single };
 
   const features = numeric(attrs?.supported_features) ?? 0;
-  // eslint-disable-next-line no-bitwise
   if (features & CLIMATE_SUPPORT_TARGET_RANGE) return { kind: "range", low: undefined, high: undefined };
   return { kind: "single", value: undefined };
 }
@@ -62,7 +61,6 @@ export function readClimateTarget(attrs: TargetAttributes | undefined): ClimateT
 /** Whether the entity can be asked for a band at all. */
 export function supportsRange(attrs: TargetAttributes | undefined): boolean {
   const features = numeric(attrs?.supported_features) ?? 0;
-  // eslint-disable-next-line no-bitwise
   return (features & CLIMATE_SUPPORT_TARGET_RANGE) !== 0;
 }
 

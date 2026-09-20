@@ -17,6 +17,7 @@ import {
   WINDOW_OPEN_COLOR,
   DEFAULT_BATTERY_THRESHOLD,
   DEFAULT_TEMP_STEP,
+  CLIMATE_BAND_ROW_GAP,
   DEFAULT_CLIMATE_RADIUS,
   resolveCornerRadius,
   THEME_COLOR_TOKENS,
@@ -31,6 +32,13 @@ import { shouldAnimate } from "./shared/animation";
 import { migrateAnimationsField } from "./shared/config-migration";
 import { activateOnKey } from "./shared/a11y";
 import { TemplatedCard } from "./shared/templated-card";
+import {
+  nudgeRange,
+  readClimateTarget,
+  setTargetRange,
+  setTargetTemperature,
+  type TargetBound,
+} from "./shared/climate-target";
 
 console.info(
   `%c M3-CLIMATE-CARD %c v${CARD_VERSION} `,
@@ -188,10 +196,81 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     let next = currentTemp + direction * step;
     next = Math.min(max, Math.max(min, next));
     next = Math.round(next / step) * step;
-    this.hass.callService("climate", "set_temperature", {
-      entity_id: this._config.entity,
-      temperature: next,
-    });
+    setTargetTemperature(this.hass, this._config.entity, next);
+  }
+
+  /**
+   * Moves one bound of a band.
+   *
+   * The arithmetic is `nudgeRange`'s, not this card's: it is the part that
+   * has to know that the two bounds may neither cross nor meet, and it is
+   * shared with the mini card so both stop at the same place. The service
+   * call sends both bounds even though one moved — see `setTargetRange`.
+   */
+  private _handleBandStep(
+    bound: TargetBound,
+    current: { low?: number; high?: number },
+    direction: 1 | -1,
+    limits: { step: number; min: number; max: number },
+    unavailable: boolean,
+  ): void {
+    if (unavailable || !this.hass || !this._config) return;
+    const next = nudgeRange(current, bound, direction * limits.step, limits);
+    if (!next) return;
+    setTargetRange(this.hass, this._config.entity, next);
+  }
+
+  /**
+   * One stepper row: minus, the reading with its label, plus.
+   *
+   * A single setpoint renders one of these and a band renders two, so the
+   * band inherits the card's control vocabulary instead of introducing a
+   * second one. `stepLabels` is only set for a band, where two identical
+   * "+" buttons would otherwise be indistinguishable to a screen reader.
+   */
+  private _renderStepper(opts: {
+    value?: number;
+    label: string;
+    unit: string;
+    blank: boolean;
+    disabled: boolean;
+    stepLabels?: { minus: string; plus: string };
+    onStep: (direction: 1 | -1) => void;
+  }) {
+    const { value, label, unit, blank, disabled, stepLabels, onStep } = opts;
+    const reading =
+      blank || value === undefined ? "–" : `${this._formatNumber(value)} ${unit}`;
+    return html`
+      <div class="stepper-row">
+        <button
+          class="stepper-btn minus"
+          ?disabled=${disabled}
+          aria-label=${stepLabels?.minus ?? nothing}
+          @click=${() => onStep(-1)}
+        >
+          −
+        </button>
+        <div
+          class="stepper-display"
+          role="button"
+          tabindex="0"
+          aria-label=${label}
+          @click=${() => this._fireMoreInfo(this._config?.entity)}
+          @keydown=${activateOnKey(() => this._fireMoreInfo(this._config?.entity))}
+        >
+          <div class="value">${reading}</div>
+          <div class="label">${label}</div>
+        </div>
+        <button
+          class="stepper-btn plus"
+          ?disabled=${disabled}
+          aria-label=${stepLabels?.plus ?? nothing}
+          @click=${() => onStep(1)}
+        >
+          +
+        </button>
+      </div>
+    `;
   }
 
   protected render() {
@@ -302,15 +381,13 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     const presetStyle = this._config.preset_style ?? "chip";
     const tempInHeader = this._config.temperature_chip_placement === "header";
 
-    const targetTemp: number | undefined =
-      typeof attrs.temperature === "number"
-        ? attrs.temperature
-        : typeof attrs.target_temp_high === "number"
-          ? attrs.target_temp_high
-          : undefined;
-    const step = attrs.target_temp_step ?? DEFAULT_TEMP_STEP;
-    const minTemp = attrs.min_temp ?? 7;
-    const maxTemp = attrs.max_temp ?? 35;
+    // In heat/cool a thermostat holds a band rather than one setpoint. The
+    // attributes decide which it is — see shared/climate-target.ts.
+    const target = readClimateTarget(attrs);
+    const step: number = attrs.target_temp_step ?? DEFAULT_TEMP_STEP;
+    const minTemp: number = attrs.min_temp ?? 7;
+    const maxTemp: number = attrs.max_temp ?? 35;
+    const limits = { step, min: minTemp, max: maxTemp };
     const radius = resolveCornerRadius(
       this._config.radius ?? DEFAULT_CLIMATE_RADIUS,
       this._config.corners,
@@ -461,57 +538,81 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
               `
             : nothing}
 
-          <div class="stepper-row">
-            <button
-              class="stepper-btn minus"
-              ?disabled=${dimUnavailable || targetTemp === undefined}
-              @click=${() =>
-                targetTemp !== undefined &&
-                this._handleStep(
-                  -1,
-                  targetTemp,
-                  step,
-                  minTemp,
-                  maxTemp,
-                  dimUnavailable,
-                )}
-            >
-              −
-            </button>
-            <div
-              class="stepper-display"
-              role="button"
-              tabindex="0"
-              aria-label=${this._t("target_temperature")}
-              @click=${() => this._fireMoreInfo(this._config?.entity)}
-              @keydown=${activateOnKey(() => this._fireMoreInfo(this._config?.entity))}
-            >
-              <div class="value">
-                ${unavailable || targetTemp === undefined
-                  ? "–"
-                  : `${this._formatNumber(targetTemp)} ${tempUnit}`}
-              </div>
-              <div class="label">${this._t("target_temperature")}</div>
-            </div>
-            <button
-              class="stepper-btn plus"
-              ?disabled=${dimUnavailable || targetTemp === undefined}
-              @click=${() =>
-                targetTemp !== undefined &&
-                this._handleStep(
-                  1,
-                  targetTemp,
-                  step,
-                  minTemp,
-                  maxTemp,
-                  dimUnavailable,
-                )}
-            >
-              +
-            </button>
-          </div>
+          ${target.kind === "range"
+            ? this._renderBand(target, limits, tempUnit, unavailable, dimUnavailable)
+            : this._renderStepper({
+                value: target.value,
+                label: this._t("target_temperature"),
+                unit: tempUnit,
+                blank: unavailable,
+                disabled: dimUnavailable || target.value === undefined,
+                onStep: (direction) =>
+                  target.value !== undefined &&
+                  this._handleStep(
+                    direction,
+                    target.value,
+                    step,
+                    minTemp,
+                    maxTemp,
+                    dimUnavailable,
+                  ),
+              })}
         </div>
       </ha-card>
+    `;
+  }
+
+  /**
+   * A band as two stepper rows: heat to, cool above.
+   *
+   * Not a two-handle slider. This card's target is a large reading with a
+   * minus and a plus either side of it, docked to the bottom — a drag track
+   * would be a second idiom for the same job, and on a six-column tile two
+   * handles land close enough together to fight each other's touch targets.
+   * Stacking the row the card already has says which bound is which in its
+   * own label, and both bounds are adjusted exactly where one used to be.
+   *
+   * Either bound missing disables both rows: `nudgeRange` needs the pair to
+   * keep them apart, and a half-known band is one the card must not move.
+   */
+  private _renderBand(
+    target: { low?: number; high?: number },
+    limits: { step: number; min: number; max: number },
+    unit: string,
+    unavailable: boolean,
+    dimUnavailable: boolean,
+  ) {
+    const incomplete = target.low === undefined || target.high === undefined;
+    const disabled = dimUnavailable || incomplete;
+    const lowLabel = this._t("target_temp_low");
+    const highLabel = this._t("target_temp_high");
+    return html`
+      <div
+        class="stepper-band"
+        role="group"
+        aria-label=${this._t("target_temp_range")}
+      >
+        ${this._renderStepper({
+          value: target.low,
+          label: lowLabel,
+          unit,
+          blank: unavailable,
+          disabled,
+          stepLabels: { minus: `${lowLabel} −`, plus: `${lowLabel} +` },
+          onStep: (direction) =>
+            this._handleBandStep("low", target, direction, limits, dimUnavailable),
+        })}
+        ${this._renderStepper({
+          value: target.high,
+          label: highLabel,
+          unit,
+          blank: unavailable,
+          disabled,
+          stepLabels: { minus: `${highLabel} −`, plus: `${highLabel} +` },
+          onStep: (direction) =>
+            this._handleBandStep("high", target, direction, limits, dimUnavailable),
+        })}
+      </div>
     `;
   }
 
@@ -759,6 +860,20 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       flex-shrink: 0;
       gap: 2px;
       margin-top: auto;
+    }
+
+    /* A band is two of the same rows, stacked and held together by a gap
+       tighter than the card's own, so the pair reads as one target. */
+    .stepper-band {
+      display: flex;
+      flex-direction: column;
+      gap: ${unsafeCSS(CLIMATE_BAND_ROW_GAP)}px;
+      flex-shrink: 0;
+      margin-top: auto;
+    }
+
+    .stepper-band .stepper-row {
+      margin-top: 0;
     }
 
     .stepper-btn {

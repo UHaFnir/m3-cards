@@ -24,8 +24,16 @@ import { renderMissingEntity } from "./shared/glass-card";
 import { shouldAnimate } from "./shared/animation";
 import { migrateAnimationsField } from "./shared/config-migration";
 import { activateOnKey } from "./shared/a11y";
-import { tintOn, foregroundOn } from "./shared/color-config";
+import { tintOn, tintInk, foregroundOn } from "./shared/color-config";
 import { TemplatedCard } from "./shared/templated-card";
+import {
+  readClimateTarget,
+  nudgeRange,
+  setTargetRange,
+  setTargetTemperature,
+  type ClimateTarget,
+  type TargetBound,
+} from "./shared/climate-target";
 
 console.info(
   `%c M3-CLIMATE-CARD-MINI %c v${CARD_VERSION} `,
@@ -38,6 +46,13 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @state() private _config?: M3ClimateCardMiniConfig;
+
+  // Which end of a band the minus/plus buttons move. A thermostat in
+  // heat/cool holds two setpoints, and this tile has room for one pair of
+  // buttons — so both numbers are printed and the buttons are aimed at the
+  // one that is lit. Purely a view state: nothing is written to the config,
+  // and a card that never sees a band never uses it.
+  @state() private _bound: TargetBound = "low";
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import("./m3-climate-card-mini-editor");
@@ -152,10 +167,133 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
     let next = currentTemp + direction * step;
     next = Math.min(max, Math.max(min, next));
     next = Math.round(next / step) * step;
-    this.hass.callService("climate", "set_temperature", {
-      entity_id: this._config.entity,
-      temperature: next,
-    });
+    setTargetTemperature(this.hass, this._config.entity, next);
+  }
+
+  /**
+   * Moves one end of a band.
+   *
+   * `nudgeRange` does the clamping, including keeping the two bounds a step
+   * apart, and `setTargetRange` sends both of them — an omitted bound is read
+   * by several integrations as permission to reset it.
+   */
+  private _handleRangeStep(
+    direction: 1 | -1,
+    range: { low?: number; high?: number },
+    step: number,
+    min: number,
+    max: number,
+    unavailable: boolean,
+  ): void {
+    if (unavailable || !this.hass || !this._config) return;
+    const next = nudgeRange(range, this._bound, direction * step, { step, min, max });
+    if (!next) return;
+    setTargetRange(this.hass, this._config.entity, next);
+  }
+
+  private _selectBound(bound: TargetBound): void {
+    this._bound = bound;
+  }
+
+  /**
+   * The bottom row: minus, the target, plus.
+   *
+   * A single setpoint gets the row this card has always had. A band gets both
+   * numbers side by side in place of the one, because a tile this size has no
+   * second pair of buttons to give each bound its own — tapping a number aims
+   * the buttons at it instead.
+   */
+  private _renderStepper(
+    target: ClimateTarget,
+    limits: { step: number; min: number; max: number },
+    unavailable: boolean,
+    dimUnavailable: boolean,
+  ) {
+    const { step, min, max } = limits;
+    const readout = (value: number | undefined) =>
+      unavailable || value === undefined ? "–" : `${this._formatNumber(value)}°`;
+
+    if (target.kind === "range") {
+      const complete = target.low !== undefined && target.high !== undefined;
+      const locked = dimUnavailable || !complete;
+      const renderBound = (which: TargetBound, value: number | undefined) => {
+        const selected = this._bound === which;
+        return html`
+          <button
+            class="bound ${selected ? "selected" : ""}"
+            ?disabled=${dimUnavailable}
+            aria-pressed=${selected}
+            aria-label=${this._t(
+              which === "low" ? "target_temp_low" : "target_temp_high",
+            )}
+            @click=${() => this._selectBound(which)}
+          >
+            ${readout(value)}
+          </button>
+        `;
+      };
+      return html`
+        <div
+          class="stepper-row range"
+          role="group"
+          aria-label=${this._t("target_temp_range")}
+        >
+          <button
+            class="stepper-btn minus"
+            ?disabled=${locked}
+            @click=${() =>
+              this._handleRangeStep(-1, target, step, min, max, dimUnavailable)}
+          >
+            −
+          </button>
+          ${renderBound("low", target.low)} ${renderBound("high", target.high)}
+          <button
+            class="stepper-btn plus"
+            ?disabled=${locked}
+            @click=${() =>
+              this._handleRangeStep(1, target, step, min, max, dimUnavailable)}
+          >
+            +
+          </button>
+        </div>
+      `;
+    }
+
+    const targetTemp = target.value;
+    return html`
+      <div class="stepper-row">
+        <button
+          class="stepper-btn minus"
+          ?disabled=${dimUnavailable || targetTemp === undefined}
+          @click=${() =>
+            targetTemp !== undefined &&
+            this._handleStep(-1, targetTemp, step, min, max, dimUnavailable)}
+        >
+          −
+        </button>
+        <div
+          class="stepper-value"
+          role="button"
+          tabindex="0"
+          aria-label=${this._t("target_temperature")}
+          @click=${() => this._fireMoreInfo(this._config?.entity)}
+          @keydown=${activateOnKey(() =>
+            this._fireMoreInfo(this._config?.entity),
+          )}
+        >
+          ${readout(targetTemp)}
+        </div>
+        <button
+          class="stepper-btn plus"
+          ?disabled=${dimUnavailable || targetTemp === undefined}
+          @click=${() =>
+            targetTemp !== undefined &&
+            this._handleStep(1, targetTemp, step, min, max, dimUnavailable)}
+        >
+          +
+        </button>
+      </div>
+    `;
   }
 
   protected render() {
@@ -231,6 +369,10 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
     );
     const minusBg = tintOn(this, minusColor, this._config.minus_opacity, 8);
     const plusBg = tintOn(this, plusColor, this._config.plus_opacity, 20);
+    // The lit bound of a band is a well of its own, so its number is measured
+    // against that well and not against the card.
+    const boundBg = tintOn(this, modeColor, undefined, 22);
+    const boundInk = tintInk(this, modeColor, undefined, 22);
 
     const hvacModesRaw: string[] = Array.isArray(attrs.hvac_modes)
       ? attrs.hvac_modes
@@ -252,8 +394,11 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
         ? `${this._formatNumber(currentTemperature)} ${tempUnit} · ${modeLabel}`
         : modeLabel;
 
-    const targetTemp: number | undefined =
-      typeof attrs.temperature === "number" ? attrs.temperature : undefined;
+    // The attributes decide the shape of the target, not the mode: in
+    // heat/cool a thermostat carries `target_temp_low` and `target_temp_high`
+    // and no `temperature` at all, which this card used to read as "no target"
+    // and print as a dash (issue #21).
+    const target = readClimateTarget(attrs);
     const step = attrs.target_temp_step ?? DEFAULT_TEMP_STEP;
     const minTemp = attrs.min_temp ?? 7;
     const maxTemp = attrs.max_temp ?? 35;
@@ -265,7 +410,7 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
 
     return html`
       <ha-card
-        style=${`--m3-mode-color: ${modeColor}; --m3-icon-active-color: ${foregroundOn(iconActiveColor, iconActiveBg)}; --m3-icon-inactive-color: ${foregroundOn(iconInactiveColor, iconInactiveBg)}; --m3-power-active-color: ${foregroundOn(powerActiveColor, powerActiveBg)}; --m3-power-inactive-color: ${foregroundOn(powerInactiveColor, powerInactiveBg)}; --m3-plus-color: ${plusColor}; --m3-minus-color: ${minusColor}; --m3-icon-inactive-bg: ${iconInactiveBg}; --m3-icon-active-bg: ${iconActiveBg}; --m3-power-inactive-bg: ${powerInactiveBg}; --m3-power-active-bg: ${powerActiveBg}; --m3-minus-bg: ${minusBg}; --m3-plus-bg: ${plusBg}; border-radius: ${radius};`}
+        style=${`--m3-mode-color: ${modeColor}; --m3-icon-active-color: ${foregroundOn(iconActiveColor, iconActiveBg)}; --m3-icon-inactive-color: ${foregroundOn(iconInactiveColor, iconInactiveBg)}; --m3-power-active-color: ${foregroundOn(powerActiveColor, powerActiveBg)}; --m3-power-inactive-color: ${foregroundOn(powerInactiveColor, powerInactiveBg)}; --m3-plus-color: ${plusColor}; --m3-minus-color: ${minusColor}; --m3-icon-inactive-bg: ${iconInactiveBg}; --m3-icon-active-bg: ${iconActiveBg}; --m3-power-inactive-bg: ${powerInactiveBg}; --m3-power-active-bg: ${powerActiveBg}; --m3-minus-bg: ${minusBg}; --m3-plus-bg: ${plusBg}; --m3-bound-bg: ${boundBg}; --m3-bound-color: ${boundInk}; border-radius: ${radius};`}
         class=${dimUnavailable ? "unavailable" : ""}
       >
         <div
@@ -308,54 +453,12 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
             </button>
           </div>
 
-          <div class="stepper-row">
-            <button
-              class="stepper-btn minus"
-              ?disabled=${dimUnavailable || targetTemp === undefined}
-              @click=${() =>
-                targetTemp !== undefined &&
-                this._handleStep(
-                  -1,
-                  targetTemp,
-                  step,
-                  minTemp,
-                  maxTemp,
-                  dimUnavailable,
-                )}
-            >
-              −
-            </button>
-            <div
-              class="stepper-value"
-              role="button"
-              tabindex="0"
-              aria-label=${this._t("target_temperature")}
-              @click=${() => this._fireMoreInfo(this._config?.entity)}
-              @keydown=${activateOnKey(() =>
-                this._fireMoreInfo(this._config?.entity),
-              )}
-            >
-              ${unavailable || targetTemp === undefined
-                ? "–"
-                : `${this._formatNumber(targetTemp)}°`}
-            </div>
-            <button
-              class="stepper-btn plus"
-              ?disabled=${dimUnavailable || targetTemp === undefined}
-              @click=${() =>
-                targetTemp !== undefined &&
-                this._handleStep(
-                  1,
-                  targetTemp,
-                  step,
-                  minTemp,
-                  maxTemp,
-                  dimUnavailable,
-                )}
-            >
-              +
-            </button>
-          </div>
+          ${this._renderStepper(
+            target,
+            { step, min: minTemp, max: maxTemp },
+            unavailable,
+            dimUnavailable,
+          )}
         </div>
       </ha-card>
     `;
@@ -475,7 +578,8 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
 
     .card-inner.no-animations .icon-swatch,
     .card-inner.no-animations .power-btn,
-    .card-inner.no-animations .stepper-btn {
+    .card-inner.no-animations .stepper-btn,
+    .card-inner.no-animations .bound {
       transition: none;
     }
 
@@ -571,6 +675,62 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* A band has two numbers where a single setpoint has one, and this row is
+       40px tall on a tile meant to sit two-up on a phone — there is no room
+       for a second pair of buttons. So the buttons shrink to the width of
+       their glyph, both bounds are printed at full strength, and the lit one
+       is the one the buttons move. */
+    .stepper-row.range .stepper-btn {
+      flex: 0 0 40px;
+    }
+
+    .bound {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--primary-text-color) 4%, var(--ha-card-background, var(--card-background-color)));
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--primary-text-color);
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: all 0.35s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    /* Only the fill and the ink change between the two, never the size: the
+       unlit bound is a number to read, not a number to squint at. */
+    .bound.selected {
+      background: var(--m3-bound-bg);
+      color: var(--m3-bound-color);
+    }
+
+    .bound:disabled {
+      cursor: default;
+    }
+
+    .bound:focus-visible {
+      outline: 2px solid var(--m3-icon-active-color, var(--primary-color));
+      outline-offset: -2px;
+    }
+
+    @container (max-width: 230px) {
+      .stepper-row.range .stepper-btn {
+        flex: 0 0 32px;
+      }
+
+      .bound {
+        font-size: 13px;
+      }
     }
 
     @container (max-height: 150px) {

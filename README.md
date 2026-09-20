@@ -246,6 +246,38 @@ mode_colors:
   cool: "#6ba7dc"
 ```
 
+### Auto (heat/cool): a band, not one number
+
+A thermostat in `heat_cool` — "Auto" on an Ecobee, and on most American
+systems — does not hold one setpoint. It holds two: `target_temp_low`, the
+temperature it heats up to, and `target_temp_high`, the one it starts cooling
+above. In that mode there is no `temperature` attribute at all.
+
+The card therefore reads the attributes, not the mode, and draws what is
+actually there. A single setpoint gets the one stepper row it always had. A
+band gets two of the same row stacked at the bottom of the card, labelled
+"Heat to" and "Cool above", each with its own minus and plus. Nothing needs
+to be configured — an entity that switches between `heat` and `heat_cool`
+switches control with it.
+
+Two rows rather than one slider with two handles: the card's target has
+always been a large reading with a minus and a plus either side of it, and a
+drag track would be a second idiom for the same job. On a six-column tile two
+handles also sit close enough together to fight each other's touch targets.
+
+The two bounds can neither cross nor meet — a thermostat asked to heat to 21
+and cool above 21 is being asked to do both at once — so each one stops one
+step short of the other. Every adjustment sends **both** bounds to
+`climate.set_temperature`, even the one that did not move: several
+integrations treat an omitted bound as "no opinion" and reset it to whatever
+they had. If the entity reports only one of the two, both rows go inert
+rather than guess at the other.
+
+Earlier versions fell back to `target_temp_high` and presented it as if it
+were a single setpoint — worse than showing nothing, because the plus and
+minus then moved only the cooling bound while the label claimed it was the
+target temperature (issue #22).
+
 ### Folding a room away
 
 `collapsible: true` puts a chevron in the header and folds the card down to
@@ -343,7 +375,8 @@ based on its own content. Two options:
 
 A compact companion card to the full climate card: icon tile + on/off
 button on top, name + "current temperature · mode" below that, a
-minus/target-temperature/plus stepper at the bottom. No preset, sensor, or
+minus/target-temperature/plus stepper at the bottom (two numbers instead of
+one when the thermostat holds a heat/cool band). No preset, sensor, or
 mode-row support — in exchange, two tiles comfortably fit side by side on a
 phone screen.
 
@@ -392,9 +425,35 @@ Icon, on/off button, and plus color follow `mode_colors` by default
 `minus_inactive_color` additionally allow a fully independent color per
 element and state.
 
+### Auto (heat/cool): two setpoints
+
+A thermostat in heat/cool mode has no single target temperature. It holds a
+band — `target_temp_low` and `target_temp_high`, and no `temperature` at all —
+so a card that reads `temperature` finds nothing and shows a dash. The card
+reads the attributes rather than the mode: whichever a thermostat reports is
+what it gets, which also keeps it right for the vendors that leave a band
+attribute lying around in a single-setpoint mode.
+
+When there is a band, both numbers are printed side by side where the single
+target normally sits: heat-to on the left, cool-above on the right. Tapping one
+lights it and aims the minus/plus buttons at it; the other stays at full
+strength, only uncoloured. One pair of buttons is all a tile this size has room
+for — a second pair would halve both numbers, and this card exists to stay
+readable two-up on a phone. There is nothing to configure: the band appears
+because the thermostat reports one.
+
+The two bounds can neither meet nor cross. Each stops one step short of the
+other, since a thermostat told to heat to 21 and cool above 21 is being asked
+to do both at once. Every adjustment sends both bounds together, because
+`climate.set_temperature` treats an omitted bound as "no opinion" and several
+integrations then reset it. A bound the thermostat has not reported, or an
+unavailable entity, shows `–` and disables the buttons — exactly as a missing
+single setpoint does.
+
 The on/off button calls `homeassistant.toggle` on the entity. Tapping the
 icon tile, the name/status, or the target-temperature display opens the
-more-info dialog.
+more-info dialog. With a band the two numbers select instead of opening it;
+the icon tile and the name/status still do.
 
 </details>
 

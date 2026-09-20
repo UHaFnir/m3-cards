@@ -38,6 +38,38 @@ mode_colors:
   cool: "#6ba7dc"
 ```
 
+### Auto (heat/cool): a band, not one number
+
+A thermostat in `heat_cool` — "Auto" on an Ecobee, and on most American
+systems — does not hold one setpoint. It holds two: `target_temp_low`, the
+temperature it heats up to, and `target_temp_high`, the one it starts cooling
+above. In that mode there is no `temperature` attribute at all.
+
+The card therefore reads the attributes, not the mode, and draws what is
+actually there. A single setpoint gets the one stepper row it always had. A
+band gets two of the same row stacked at the bottom of the card, labelled
+"Heat to" and "Cool above", each with its own minus and plus. Nothing needs
+to be configured — an entity that switches between `heat` and `heat_cool`
+switches control with it.
+
+Two rows rather than one slider with two handles: the card's target has
+always been a large reading with a minus and a plus either side of it, and a
+drag track would be a second idiom for the same job. On a six-column tile two
+handles also sit close enough together to fight each other's touch targets.
+
+The two bounds can neither cross nor meet — a thermostat asked to heat to 21
+and cool above 21 is being asked to do both at once — so each one stops one
+step short of the other. Every adjustment sends **both** bounds to
+`climate.set_temperature`, even the one that did not move: several
+integrations treat an omitted bound as "no opinion" and reset it to whatever
+they had. If the entity reports only one of the two, both rows go inert
+rather than guess at the other.
+
+Earlier versions fell back to `target_temp_high` and presented it as if it
+were a single setpoint — worse than showing nothing, because the plus and
+minus then moved only the cooling bound while the label claimed it was the
+target temperature (issue #22).
+
 ### Folding a room away
 
 `collapsible: true` puts a chevron in the header and folds the card down to

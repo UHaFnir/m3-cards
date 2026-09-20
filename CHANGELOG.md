@@ -426,6 +426,24 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **A thermostat in heat/cool showed one number or none.** In Auto a climate
+  entity holds `target_temp_low` and `target_temp_high` and no `temperature` at
+  all. Both climate cards read `temperature`: the mini showed nothing, and the
+  full card fell back to `target_temp_high` — worse than nothing, because it
+  looks like a single setpoint and is silently the top of a band, with the plus
+  and minus moving only that end of it.
+
+  Both now read the target as a band when the entity has one, and the
+  attributes decide rather than the mode. The full card stacks its own stepper
+  row twice, *heat to* above *cool above*; the mini prints both numbers where
+  the single one used to sit and lets its one pair of buttons act on whichever
+  is lit, because two spinboxes at that width would leave each number about
+  thirty pixels. The bounds stop a step short of each other — heating to 21
+  while cooling to 21 asks a thermostat to do both at once — and both are
+  always sent, since `climate.set_temperature` reads an omitted bound as "no
+  opinion" and several integrations then reset it. A single-setpoint thermostat
+  renders exactly as before. Reported in #21 and #22.
+
 - **A chip button with no `tap_action` opened more-info instead of acting.**
   `runHaAction` falls back to more-info when the config says nothing, and the
   chip row was the one place that never asked `defaultEntityAction` first — so a
