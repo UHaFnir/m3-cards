@@ -804,13 +804,20 @@ export interface M3VacuumCardConfig extends VacuumEntityOverrides, NotifyConfigB
   /** Height of the map preview in px. Defaults to 360. */
   map_height?: number;
   /**
-   * Pinch, drag and wheel zoom on the map. On by default — a Roborock map
-   * carries wide transparent margins, so zooming in is how the floor plan
-   * fills the space it was given.
+   * The magnifier that opens the map full-screen, where it pinches, drags and
+   * wheel-zooms. On by default — a Roborock map carries wide transparent
+   * margins, so enlarging it is how the floor plan fills the space it was
+   * given. `false` leaves a plain picture.
    */
   map_zoom?: boolean;
-  /** How far it may be zoomed. Defaults to 4×. */
+  /** How far it may be zoomed in that view. Defaults to 4×. */
   map_max_zoom?: number;
+  /**
+   * What a tap on the map does. Without one it opens the enlarged map, and
+   * nothing at all when `map_zoom` is off. `{ action: "none" }` switches the
+   * tap off while keeping the magnifier.
+   */
+  map_tap_action?: HaActionConfig;
   show_progress?: boolean;
   show_rooms?: boolean;
   /**

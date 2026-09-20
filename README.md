@@ -4500,8 +4500,14 @@ second button goes back to 1×.
 the magnifier. Pinching an element needs `touch-action: none` on it, and that
 also swallows the vertical swipe that scrolls the dashboard. The map is the
 tallest thing on this card, so a phone was left with a few pixels beside it to
-scroll on — and the picture sliding under the thumb on every attempt. A tap on
-the card's map still opens more-info, as it always did.
+scroll on — and the picture sliding under the thumb on every attempt.
+
+**A tap on the map opens the same enlarged view.** It used to open more-info on
+the image entity, which is that same picture again with a history graph under
+it — worth having while the map could be pinched in place, useless once it
+cannot. `map_tap_action` takes it over: `{ action: "none" }` makes the picture
+inert and leaves the magnifier, and `more-info` is still there for anyone who
+wants it back.
 
 Inside the full-screen view both shields are in place: `touch-action: none` so
 the browser does not pan anything underneath, and every pointer is also handed
@@ -4629,6 +4635,7 @@ something.
 | `rooms` | list | — | Home Assistant area ids the vacuum can be sent to, in the order they should be offered. **Required for the block to appear** — see below. |
 | `map_zoom` | boolean | `true` | The magnifier that opens the map full-screen, where it pinches, drags and wheel-zooms. `false` leaves the map a plain picture. |
 | `map_max_zoom` | number | `4` | How far the pinch may go in that view. |
+| `map_tap_action` | action | opens the enlarged map | What a tap on the map does. The suite's usual action grammar, so `none`, `more-info`, `navigate`, `call-service` and the rest all apply. |
 | `show_mop_intensity` | boolean | `true` | The mop-intensity scale. |
 | `show_mop_mode` | boolean | `false` | The mop-route scale. Off by default — it is rarely changed. |
 | `show_station_chips` | boolean | `true` | The dock and mop status chips. Drawn with a rim and no fill, so they cannot be mistaken for the filled `buttons` above them; only a reminder you can tick off is filled. |

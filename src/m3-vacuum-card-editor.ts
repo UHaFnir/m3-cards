@@ -179,6 +179,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
         selector: { number: { min: 120, max: 800, step: 20, mode: "slider", unit_of_measurement: "px" } },
       },
       { name: "map_zoom", selector: { boolean: {} } },
+      { name: "map_tap_action", selector: { ui_action: {} } },
       { name: "show_fan_speed", selector: { boolean: {} } },
       { name: "show_mop_intensity", selector: { boolean: {} } },
       { name: "show_mop_mode", selector: { boolean: {} } },
@@ -264,6 +265,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       show_map: "editor_vacuum_show_map",
       map_height: "editor_vacuum_map_height",
       map_zoom: "editor_vacuum_map_zoom",
+      map_tap_action: "editor_vacuum_map_tap_action",
       show_fan_speed: "editor_vacuum_show_fan_speed",
       show_mop_intensity: "editor_vacuum_show_mop_intensity",
       show_mop_mode: "editor_vacuum_show_mop_mode",
@@ -371,6 +373,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
       show_map: cfg.show_map ?? true,
       map_height: cfg.map_height ?? VACUUM_MAP_HEIGHT,
       map_zoom: cfg.map_zoom ?? true,
+      map_tap_action: cfg.map_tap_action,
       show_fan_speed: cfg.show_fan_speed ?? true,
       show_mop_intensity: cfg.show_mop_intensity ?? true,
       show_mop_mode: cfg.show_mop_mode ?? false,
@@ -436,6 +439,7 @@ export class M3VacuumCardEditor extends LitElement implements LovelaceCardEditor
               @value-changed=${this._valueChanged}
             ></ha-form>
             <div class="hint">${this._t("editor_vacuum_map_zoom_hint")}</div>
+            <div class="hint">${this._t("editor_vacuum_map_tap_action_hint")}</div>
           </div>
         </ha-expansion-panel>
 

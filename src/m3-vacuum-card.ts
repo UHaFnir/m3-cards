@@ -765,15 +765,20 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
       parts.push(`${formatNumber(this._language, minutes, { maximumFractionDigits: 0 })} min`);
     }
 
+    // A picture that reacts to nothing should not claim to be a button, or
+    // offer a pointer cursor and a focus ring for a tap that does nothing.
+    const action = this._config?.map_tap_action;
+    const tappable = action ? isActionable(action) : this._config?.map_zoom !== false;
+
     return html`
       <div
-        class="map"
+        class="map ${tappable ? "tappable" : ""}"
         style=${`--m3v-map-height: ${this._config?.map_height ?? VACUUM_MAP_HEIGHT}px;`}
-        role="button"
-        tabindex="0"
+        role=${tappable ? "button" : "img"}
+        tabindex=${tappable ? 0 : -1}
         aria-label=${this._t("vacuum_map")}
-        @keydown=${activateOnKey(() => this._mapTapped())}
-        @click=${() => this._mapTapped()}
+        @keydown=${tappable ? activateOnKey(() => this._mapTapped()) : nothing}
+        @click=${tappable ? () => this._mapTapped() : nothing}
       >
         <img src=${source.src} alt="" />
         ${parts.length
@@ -903,9 +908,38 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     this._mapPanZoom.reset();
   }
 
-  /** The map's own tap, once a gesture has been ruled out. */
+  /**
+   * The map's own tap.
+   *
+   * It used to open more-info on the image entity, and that was worth having
+   * only while the map could be pinched in place: more-info on an `image` is
+   * the same picture again with a history graph under it, which answers no
+   * question anybody had about a floor plan. So a plain tap now does what the
+   * magnifier does. `map_tap_action` overrides it — `{ action: "none" }`
+   * makes the map inert, and more-info is still available by asking for it.
+   */
   private _mapTapped(): void {
-    this._fireMoreInfo(this._entity("map_entity", "map"));
+    const action = this._config?.map_tap_action;
+    if (!action) {
+      if (this._config?.map_zoom !== false) this._openMap();
+      return;
+    }
+    if (!isActionable(action) || !this.hass) return;
+    runHaAction(this.hass, action, {
+      entityId: this._entity("map_entity", "map") ?? this._config!.entity,
+      openPopup: () => this._openPopup(),
+      fireMoreInfo: (id) => this._fireMoreInfo(id),
+      navigate: (path) => {
+        window.history.pushState(null, "", path);
+        this.dispatchEvent(
+          new CustomEvent("location-changed", {
+            bubbles: true,
+            composed: true,
+            detail: { replace: false },
+          }),
+        );
+      },
+    });
   }
 
   private _numeric(entityId: string | undefined): number | undefined {
@@ -1477,11 +1511,14 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
         position: relative;
         border-radius: ${unsafeCSS(VACUUM_MAP_RADIUS)}px;
         overflow: hidden;
-        cursor: pointer;
         /* A faint ground so a map with transparent edges does not float on
            whatever the card background happens to be. */
         background: color-mix(in srgb, var(--m3p-text, currentColor) 5%, transparent);
         line-height: 0;
+      }
+
+      .map.tappable {
+        cursor: pointer;
       }
 
       .map:focus-visible {

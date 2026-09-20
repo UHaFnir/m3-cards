@@ -39,7 +39,10 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   scrolls with. The map is the tallest thing on the card, so that left a phone
   a few pixels beside it to scroll on. The magnifier in its corner opens the
   picture full-screen instead, and the pinching, dragging and double-tapping
-  happens there, where nothing is behind it to scroll.
+  happens there, where nothing is behind it to scroll. A tap on the map opens
+  that same view: more-info on an `image` entity is the picture again with a
+  history graph under it, which answers no question anyone had about a floor
+  plan. `map_tap_action` overrides it, down to `none`.
 
   **The dock is a second device.** Roborock registers it separately, with
   `via_device_id` and `parent_device_id` both null, tied to the vacuum only by
