@@ -11,6 +11,8 @@ section_order: 41
 The other half of the vacuum pair: wear counters, dock actions and lifetime
 totals.
 
+<img src="docs/images/vacuum-maintenance-card.png" alt="Vacuum Maintenance Card" width="440">
+
 ```yaml
 type: custom:m3-vacuum-maintenance-card
 entity: vacuum.dobby

@@ -3459,6 +3459,8 @@ it is full — "not full" is not news.
 
 One appliance, with its status and its everyday controls on the same card.
 
+<img src="docs/images/appliance-card.png" alt="Appliance Card" width="440">
+
 The suite already had a washing machine's progress bar
 ([progress](#m3-progress-card)) and a grid of readings
 ([status](#m3-status-card)), but neither can *do* anything: starting the
@@ -4393,6 +4395,8 @@ bar in its resting state — a 56px pill, a leading search icon, placeholder
 text, an optional trailing Assist button — and a tap opens Home Assistant's
 own quick bar, the same dialog the `E` key opens.
 
+<img src="docs/images/search-card.png" alt="Search Card" width="440">
+
 It exists because Home Assistant's own search entry point is in the header,
 and the header's search button is **not rendered at all on a narrow screen**.
 On a phone or a wall tablet there is no way to reach the entity search from a
@@ -4508,6 +4512,8 @@ progress, the mop controls, the dock chips — is looked up on the vacuum's own
 device and simply left out when it is not there, so a Valetudo, Dreame or
 Xiaomi vacuum gets the header, the buttons and the suction row without being
 asked to support anything it cannot.
+
+<img src="docs/images/vacuum-card.png" alt="Vacuum Card" width="440">
 
 ```yaml
 type: custom:m3-vacuum-card
@@ -4768,6 +4774,8 @@ to the entity id, so renaming an entity does not hide it from the card.
 
 The other half of the vacuum pair: wear counters, dock actions and lifetime
 totals.
+
+<img src="docs/images/vacuum-maintenance-card.png" alt="Vacuum Maintenance Card" width="440">
 
 ```yaml
 type: custom:m3-vacuum-maintenance-card

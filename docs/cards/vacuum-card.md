@@ -17,6 +17,8 @@ device and simply left out when it is not there, so a Valetudo, Dreame or
 Xiaomi vacuum gets the header, the buttons and the suction row without being
 asked to support anything it cannot.
 
+<img src="docs/images/vacuum-card.png" alt="Vacuum Card" width="440">
+
 ```yaml
 type: custom:m3-vacuum-card
 entity: vacuum.sushi

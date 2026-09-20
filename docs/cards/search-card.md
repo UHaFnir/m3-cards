@@ -13,6 +13,8 @@ bar in its resting state — a 56px pill, a leading search icon, placeholder
 text, an optional trailing Assist button — and a tap opens Home Assistant's
 own quick bar, the same dialog the `E` key opens.
 
+<img src="docs/images/search-card.png" alt="Search Card" width="440">
+
 It exists because Home Assistant's own search entry point is in the header,
 and the header's search button is **not rendered at all on a narrow screen**.
 On a phone or a wall tablet there is no way to reach the entity search from a

@@ -10,6 +10,8 @@ section_order: 33
 
 One appliance, with its status and its everyday controls on the same card.
 
+<img src="docs/images/appliance-card.png" alt="Appliance Card" width="440">
+
 The suite already had a washing machine's progress bar
 ([progress](#m3-progress-card)) and a grid of readings
 ([status](#m3-status-card)), but neither can *do* anything: starting the
