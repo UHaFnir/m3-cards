@@ -40,6 +40,8 @@ import { shouldAnimate } from "./shared/animation";
 import { fireEvent } from "./shared/editor-helpers";
 import { localize, type TranslationKey } from "./localize";
 import { hassChangeMatters } from "./shared/should-update";
+import { confirmDialogStyles, renderConfirmDialog, type ConfirmRequest } from "./shared/confirm-dialog";
+import { syncDialogOpenState } from "./shared/popup-card";
 import { decimalSeparator, formatNumber } from "./shared/formatting";
 import { TemplatedCard } from "./shared/templated-card";
 
@@ -63,6 +65,8 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
   @state() private _narrow = false;
   @state() private _adjusting = false;
   @state() private _adjustError = "";
+  /** The pending "are you sure?" of a calibration. */
+  @state() private _confirm?: ConfirmRequest;
 
   private _minIntegerDigits = DEFAULT_COUNTER_MIN_DIGITS;
   private _prevDigitByKey = new Map<string, string>();
@@ -220,12 +224,35 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
     this._animationTimers.set(key, timer);
   }
 
-  // Which entity the correction is written to, and whether that means setting
-  // the value outright or shifting an offset by the difference.
-  private get _adjustTarget(): { entityId: string; mode: "value" | "offset" } | undefined {
+  /**
+   * Which entity the correction is written to, and how.
+   *
+   * Three ways, because a reading can be three different things:
+   *
+   * - **value** — the entity is writable itself (`input_number`, `number`).
+   * - **offset** — a separate helper is moved by the difference, which is what
+   *   a template sensor built as "sources + offset" needs.
+   * - **calibrate** — the entity is a `utility_meter`, which has no state to
+   *   write and a service of its own instead. This is the case the card was
+   *   really built for and the one it could not do: an energy or water meter
+   *   is a `utility_meter` far more often than it is a helper.
+   *
+   * A `utility_meter` must never be corrected through its *source*. The meter
+   * reads a falling source as a meter change and adds the whole new value on
+   * the next rise — measured once on the author's instance as 18,899 → 40,793
+   * in a single five-minute row. Hence the platform check before the domain
+   * one: a helper that happens to feed a meter still gets offset mode, but the
+   * meter itself gets calibrated.
+   */
+  private get _adjustTarget():
+    | { entityId: string; mode: "value" | "offset" | "calibrate" }
+    | undefined {
     const cfg = this._config;
     if (!cfg?.adjustable) return undefined;
     const target = cfg.adjust_entity || cfg.entity;
+    if (this._platformOf(target) === "utility_meter") {
+      return { entityId: target, mode: "calibrate" };
+    }
     const domain = target.split(".")[0];
     if (target !== cfg.entity) return { entityId: target, mode: "offset" };
     // Writing the displayed entity only works where a set service exists;
@@ -234,12 +261,56 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
     return undefined;
   }
 
+  /** The integration behind an entity, from the frontend's registry snapshot. */
+  private _platformOf(entityId: string): string | undefined {
+    const registry = this.hass?.entities as
+      | Record<string, { platform?: string | null }>
+      | undefined;
+    return registry?.[entityId]?.platform ?? undefined;
+  }
+
+  /**
+   * Why the correction cannot be offered, in one sentence, or nothing when it
+   * can. A silently missing control is the worst of the three states: the
+   * option is on, nothing appears, and the card never says what it wants.
+   */
+  private get _adjustBlocker(): string | undefined {
+    const cfg = this._config;
+    if (!cfg?.adjustable || this._adjustTarget) return undefined;
+    return this._t("counter_adjust_unwritable");
+  }
+
   private async _saveAdjust(raw: string): Promise<void> {
     const target = this._adjustTarget;
     const cfg = this._config;
     if (!target || !cfg || !this.hass) return;
     const wanted = parseFloat(raw.replace(",", "."));
     if (Number.isNaN(wanted)) return;
+
+    if (target.mode === "calibrate") {
+      // A meter carries history. Rewriting it is not undoable from here, and
+      // the statistics engine reads a downward step as a meter change, so the
+      // question names both before anything is sent.
+      const shown = this.hass.states[cfg.entity]?.state ?? "";
+      this._confirm = {
+        title: this._t("counter_calibrate_confirm"),
+        message: this._t("counter_calibrate_confirm_body")
+          .replace("{from}", shown)
+          .replace("{to}", String(wanted)),
+        confirmLabel: this._t("counter_calibrate"),
+        cancelLabel: this._t("counter_adjust_cancel"),
+        icon: "mdi:counter",
+        onConfirm: () => {
+          this.hass?.callService("utility_meter", "calibrate", {
+            entity_id: target.entityId,
+            value: wanted,
+          });
+          this._adjusting = false;
+          this._adjustError = "";
+        },
+      };
+      return;
+    }
 
     const domain = target.entityId.split(".")[0];
     let value = wanted;
@@ -266,7 +337,18 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
   // below the digits: a correction is a rare, deliberate act, and a full-width
   // button for it competes with the reading itself for attention.
   private _renderAdjustButton() {
-    if (!this._adjustTarget || this._adjusting) return nothing;
+    if (this._adjusting) return nothing;
+    const blocker = this._adjustBlocker;
+    if (blocker) {
+      // Drawn, greyed, and carrying its reason. `adjustable: true` on a plain
+      // sensor is a config that looks right and does nothing.
+      return html`
+        <div class="adjust-open blocked" title=${blocker} aria-label=${blocker}>
+          <ha-icon icon="mdi:pencil-off-outline"></ha-icon>
+        </div>
+      `;
+    }
+    if (!this._adjustTarget) return nothing;
     return html`
       <div
         class="adjust-open"
@@ -511,6 +593,15 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
           ${this._renderAdjust(rawValue)}
         </div>
       </ha-card>
+      <!-- Outside the card: a modal dialog is painted in the top layer, and
+           ha-card's own colour scope does not reach it. -->
+      ${renderConfirmDialog({
+        request: this._confirm,
+        host: this,
+        onCancel: () => {
+          this._confirm = undefined;
+        },
+      })}
     `;
   }
 
@@ -535,7 +626,17 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
     `;
   }
 
+  protected updated(changed: PropertyValues): void {
+    super.updated?.(changed);
+    // A native <dialog> opens imperatively, not by an attribute.
+    syncDialogOpenState(
+      this.renderRoot.querySelector("dialog.m3-confirm") as HTMLDialogElement | null,
+      this._confirm !== undefined,
+    );
+  }
+
   static styles = [
+    confirmDialogStyles,
     glassCardStyles,
     cardHeaderStyles,
     css`
@@ -676,6 +777,11 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
         display: flex;
         align-items: center;
         gap: 8px;
+      }
+
+      .adjust-open.blocked {
+        cursor: default;
+        opacity: 0.32;
       }
 
       .adjust-open {

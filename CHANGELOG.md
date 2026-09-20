@@ -4,6 +4,33 @@ Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
+## [Unreleased]
+
+### Added
+
+- **The counter card can correct a `utility_meter`.** Its pencil could write an
+  `input_number` or shift an offset helper, which covered the two cases the
+  author happened to have — and not the common one: an energy or water reading
+  is a `utility_meter` far more often than it is a helper. Pointed at one, the
+  pencil now calls `utility_meter.calibrate`, behind a confirmation, because a
+  meter carries history and the rewrite cannot be undone from the card.
+
+  It refuses the tempting shortcut on purpose. A meter must never be corrected
+  through its *source*: a falling source reads as a meter change and the whole
+  new value is added on the next rise — 18,899 to 40,793 in one five-minute row,
+  the last time that was learned here. So the platform is checked before the
+  domain, and a helper that happens to feed a meter still gets offset mode
+  while the meter itself gets calibrated.
+
+### Fixed
+
+- **`adjustable: true` could silently do nothing.** On a plain `sensor` with no
+  `adjust_entity` there is nothing to write to, and the card simply left the
+  pencil out — an option that looks set and has no effect, with nothing saying
+  why. The pencil is now drawn greyed with the reason on it. `adjustable` and
+  `adjust_entity` were also undocumented; the counter card's page now has a
+  section on all three ways a reading can be corrected.
+
 ## [2.4.0] – 2026-09-20
 
 ### Added
