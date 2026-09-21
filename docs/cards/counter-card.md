@@ -102,9 +102,16 @@ is why the card checks the platform before the domain: a meter gets calibrated,
 never shifted from below.
 
 And calibrating is not free either. The statistics engine reads a downward step
-as a meter change too, so a calibration leaves an artefact in the short-term
-statistics. The confirmation says so, and
-`recorder.adjust_sum_statistics` — plural, the singular is not a service — is
-what puts it right.
+as a meter change too, and adds the old reading to the running sum. Measured on
+a throwaway meter: calibrated from 85 to 40, the state was right immediately and
+the hourly `sum` went to **125** — the phantom consumption stays in the energy
+dashboard until it is corrected.
+
+Correcting it is **Developer tools → Statistics → "Adjust sum"**, with the
+adjustment being the old reading negated (here −85) on the hour the calibration
+happened. Note that `recorder.adjust_sum_statistics` is a *websocket command*,
+not a service: calling it from an automation or from Developer tools → Actions
+answers "Service recorder.adjust_sum_statistics not found". The confirmation the
+card shows says where to go instead.
 
 </details>
