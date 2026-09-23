@@ -289,15 +289,6 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     });
   }
 
-  // Style `expressive` only: the ± buttons carry no value, so they default to a
-  // hairline ring with no fill at all, leaving the setpoint pill beside them
-  // as the only filled shape in the row. An explicit plus_opacity /
-  // minus_opacity still gets its tint.
-  private _stepperFill(color: string, opacity: number | undefined): string {
-    if (opacity === undefined) return "transparent";
-    return tintOn(this, color, opacity, 0);
-  }
-
   // Style `tiles` keeps its single preset button cycling through the list.
   private _cyclePreset(
     presetModes: string[],
@@ -810,7 +801,6 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     unit: string;
     blank: boolean;
     disabled: boolean;
-    icon?: string;
     caption?: string;
     ariaLabel: string;
     stepLabels?: { minus: string; plus: string };
@@ -822,7 +812,6 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       value,
       blank,
       disabled,
-      icon,
       caption,
       ariaLabel,
       stepLabels,
@@ -850,7 +839,6 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           @click=${() => this._fireMoreInfo(this._config?.entity)}
           @keydown=${activateOnKey(() => this._fireMoreInfo(this._config?.entity))}
         >
-          ${icon ? html`<ha-icon icon=${icon}></ha-icon>` : nothing}
           <span class="value">${reading}</span>
           ${caption ? html`<span class="caption">${caption}</span>` : nothing}
         </div>
@@ -972,7 +960,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
 
     return html`
       <ha-card
-        style=${`--m3-mode-color: ${v.modeColor}; --m3-icon-color: ${v.iconColor}; --m3-plus-color: ${plusColor}; --m3-minus-color: ${minusColor}; --m3-icon-bg: ${tintOn(this, v.iconColor, config.icon_opacity, 8)}; --m3-plus-bg: ${this._stepperFill(plusColor, config.plus_opacity)}; --m3-minus-bg: ${this._stepperFill(minusColor, config.minus_opacity)}; --m3-setpoint-bg: ${setpoint.bg}; --m3-setpoint-ink: ${setpoint.ink}; --m3-setpoint-line: ${setpoint.line}; --m3-mode-pill-bg: ${modePill.bg}; --m3-mode-pill-ink: ${modePill.ink}; --m3-mode-pill-line: ${modePill.line}; --m3-hero-ink: ${heroInk}; border-radius: ${v.radius};`}
+        style=${`--m3-mode-color: ${v.modeColor}; --m3-icon-color: ${v.iconColor}; --m3-plus-color: ${plusColor}; --m3-minus-color: ${minusColor}; --m3-icon-bg: ${tintOn(this, v.iconColor, config.icon_opacity, 8)}; --m3-plus-bg: ${tintOn(this, plusColor, config.plus_opacity, 20)}; --m3-minus-bg: ${tintOn(this, minusColor, config.minus_opacity, 8)}; --m3-setpoint-bg: ${setpoint.bg}; --m3-setpoint-ink: ${setpoint.ink}; --m3-setpoint-line: ${setpoint.line}; --m3-mode-pill-bg: ${modePill.bg}; --m3-mode-pill-ink: ${modePill.ink}; --m3-mode-pill-line: ${modePill.line}; --m3-hero-ink: ${heroInk}; border-radius: ${v.radius};`}
         class=${v.dimUnavailable ? "unavailable" : ""}
       >
         <div
@@ -1048,7 +1036,6 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
                   unit: v.tempUnit,
                   blank: v.unavailable,
                   disabled: v.dimUnavailable || target.value === undefined,
-                  icon: v.active ? this._modeIcon(v.currentMode) : undefined,
                   ariaLabel: this._t("target_temperature"),
                   minusColor,
                   plusColor,
@@ -1594,12 +1581,12 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       flex-shrink: 0;
     }
 
-    /* Bare glyphs, no ring and no ground — unlike the tiles style's filled
-       circles. A control that carries no value and no state only gave the eye
-       two more shapes to land on before it reached the number between them.
-       One corner pair sits at the outer radius, the pair against the value
-       field squares off — "round outside, tight inside" is the Expressive
-       idiom for a segmented control. */
+    /* Same wash-tinted fill as the tiles style's ± buttons — visible fill is
+       what makes the connected shape below actually read as one segmented
+       control rather than two floating glyphs. One corner pair sits at the
+       outer radius, the pair against the value field squares off — "round
+       outside, tight inside" is the Expressive idiom for a segmented
+       control. */
     .style-expressive .stepper-btn {
       flex: 0 0 auto;
       width: 40px;
