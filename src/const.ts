@@ -167,6 +167,12 @@ export const STATELESS_DOMAINS = new Set([
   "input_button",
 ]);
 
+// "locked" is deliberately absent: for a lock, "unlocked" is the state worth
+// drawing attention to (matching HA's own frontend, which treats a lock as
+// active exactly when it is *not* locked) — the reverse of every other
+// domain here, where being in this set means "something to look at".
+// Treating "locked" as active instead left an unlocked door colored as
+// plain inactive grey while the locked, nothing-to-see state got the accent.
 export const ACTIVE_STATES = new Set([
   "on",
   "open",
@@ -180,7 +186,7 @@ export const ACTIVE_STATES = new Set([
   "dry",
   "fan_only",
   "heat_cool",
-  "locked",
+  "unlocked",
   "active",
   "detected",
   "wet",
@@ -198,7 +204,7 @@ export const RADIUS_PRESETS: Record<string, number> = {
 export const EDITABLE_STATE_COLOR_KEYS = [
   "on",
   "open",
-  "locked",
+  "unlocked",
   "home",
   "playing",
   "active",
