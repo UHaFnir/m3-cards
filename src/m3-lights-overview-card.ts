@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
   M3LightsOverviewCardConfig,
+  M3LightsDimmerOverviewCardConfig,
   LightsOverviewPopupMode,
   HaActionConfig,
   LovelaceCard,
@@ -376,34 +377,35 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   }
 
   /**
-   * The popup is this same card again, scoped to what was pressed. A
-   * discovered tile scopes by area; a manually configured room has no area,
-   * so it scopes by its explicit entity list instead — same filter
-   * vocabulary either way.
+   * The scope both card-based popup kinds ("default-grid" and "dimmer")
+   * open onto: a discovered tile scopes by area, which re-runs discovery and
+   * so also picks up anything added to the room since. A manually
+   * configured room has no area — discovery drops entities that have no
+   * area, and a manual room is exactly where those live, so it hands its own
+   * entities over as a room of one instead of asking the registry a question
+   * it cannot answer.
    */
+  private _scopeForTile(
+    tile: LightsOverviewTile,
+  ): Pick<M3LightsOverviewCardConfig, "include_area" | "rooms" | "auto_discover"> {
+    return tile.areaId
+      ? { include_area: [tile.areaId], rooms: undefined, auto_discover: true }
+      : {
+          rooms: [{ name: tile.name, entities: tile.entities, toggle_entities: tile.switchable }],
+          auto_discover: false,
+        };
+  }
+
+  /** The popup is this same card again, scoped to what was pressed. */
   private _popupConfig(tile: LightsOverviewTile): M3LightsOverviewCardConfig | undefined {
     const cfg = this._config;
     if (!cfg) return undefined;
     const popup = cfg.popup ?? {};
     const merged = mergeEntityFilters(pickEntityFilter(cfg), popup, popup.inherit_filters ?? true);
-    // A tile from an area re-runs discovery scoped to that area, which also
-    // picks up anything added to the room since. A tile from a manual `rooms`
-    // entry cannot: discovery drops entities that have no area, and a manual
-    // room is exactly where those live — the popup came up empty. It already
-    // knows its own entities, so it hands them over as a room of one instead
-    // of asking the registry a question it cannot answer.
-    const scoped: Partial<M3LightsOverviewCardConfig> = tile.areaId
-      ? { include_area: [tile.areaId], rooms: undefined, auto_discover: true }
-      : {
-          rooms: [
-            { name: tile.name, entities: tile.entities, toggle_entities: tile.switchable },
-          ],
-          auto_discover: false,
-        };
     return {
       ...cfg,
       ...merged,
-      ...scoped,
+      ...this._scopeForTile(tile),
       view: popup.view ?? "entities",
       sort: popup.sort ?? "name",
       group_handling: popup.group_handling ?? cfg.group_handling,
@@ -424,14 +426,53 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     };
   }
 
+  /**
+   * The lights dimmer overview card, scoped and filtered the same way the
+   * "default-grid" popup is, with its own `popup.dimmer` display/behavior
+   * overrides layered on. It never opens a popup of its own — the "dimmer"
+   * mode's own action editor doesn't offer "popup" — so there is no
+   * popup-in-a-popup case to guard against here the way `_popupConfig` does.
+   */
+  private _dimmerPopupConfig(tile: LightsOverviewTile): M3LightsDimmerOverviewCardConfig | undefined {
+    const cfg = this._config;
+    if (!cfg) return undefined;
+    const popup = cfg.popup ?? {};
+    const merged = mergeEntityFilters(pickEntityFilter(cfg), popup, popup.inherit_filters ?? true);
+    return {
+      ...merged,
+      ...this._scopeForTile(tile),
+      toggle_filter: cfg.toggle_filter,
+      exclude_toggle_entities: cfg.exclude_toggle_entities,
+      toggle_inherit_filters: cfg.toggle_inherit_filters,
+      group_handling: popup.group_handling ?? cfg.group_handling,
+      toggle_group_handling: popup.toggle_group_handling ?? cfg.toggle_group_handling,
+      view: "entities",
+      show_header: true,
+      show_area: popup.show_area ?? popup.dimmer?.show_area ?? false,
+      name: popup.title || tile.name,
+      ...popup.dimmer,
+      glass_background: false,
+      type: "custom:m3-lights-dimmer-overview-card",
+    };
+  }
+
   private _syncScopedPopupCard(tile: LightsOverviewTile): HTMLElement | undefined {
-    const { el, key } = syncPopupCardElement<M3LightsOverviewCardConfig>({
-      tagName: "m3-lights-overview-card",
-      config: this._popupConfig(tile),
-      hass: this.hass,
-      existingEl: this._popupCardEl,
-      existingKey: this._popupCardKey,
-    });
+    const { el, key } =
+      this._popupMode() === "dimmer"
+        ? syncPopupCardElement<M3LightsDimmerOverviewCardConfig>({
+            tagName: "m3-lights-dimmer-overview-card",
+            config: this._dimmerPopupConfig(tile),
+            hass: this.hass,
+            existingEl: this._popupCardEl,
+            existingKey: this._popupCardKey,
+          })
+        : syncPopupCardElement<M3LightsOverviewCardConfig>({
+            tagName: "m3-lights-overview-card",
+            config: this._popupConfig(tile),
+            hass: this.hass,
+            existingEl: this._popupCardEl,
+            existingKey: this._popupCardKey,
+          });
     this._popupCardEl = el;
     this._popupCardKey = key;
     return this._popupCardEl;

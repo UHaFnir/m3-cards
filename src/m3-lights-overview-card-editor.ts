@@ -6,6 +6,8 @@ import type {
   M3LightsOverviewCardConfig,
   LightsOverviewManualRoomConfig,
   LightsOverviewPopupMode,
+  LightsDimmerOrientation,
+  LightsDimmerUpdateMode,
   HaActionConfig,
 } from "./types";
 import { DEFAULT_LIGHTS_OVERVIEW_RADIUS } from "./const";
@@ -199,6 +201,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
         options: [
           { value: "default-grid", label: this._t("editor_lights_popup_mode_default_grid") },
           { value: "default-detail", label: this._t("editor_lights_popup_mode_default_detail") },
+          { value: "dimmer", label: this._t("editor_lights_popup_mode_dimmer") },
           { value: "custom", label: this._t("editor_lights_popup_mode_custom") },
         ],
       },
@@ -212,6 +215,45 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       { name: "exclude_labels", selector: { label: { multiple: true } } },
       { name: "exclude_entities", selector: { entity: { domain: "light", multiple: true } } },
       { name: "group_handling", selector: this._groupHandlingSelector() },
+    ];
+  }
+
+  // Filter/scope fields shared with "default-grid"'s own popup schema, plus
+  // the dimmer overview's own display/behavior options — the fields
+  // popup.dimmer actually carries (see LightsOverviewPopupConfig.dimmer).
+  private _dimmerPopupSchema(): SchemaEntry[] {
+    return [
+      { name: "title", selector: { text: {} } },
+      { name: "inherit_filters", selector: { boolean: {} } },
+      { name: "exclude_labels", selector: { label: { multiple: true } } },
+      { name: "exclude_entities", selector: { entity: { domain: "light", multiple: true } } },
+      { name: "group_handling", selector: this._groupHandlingSelector() },
+      {
+        name: "orientation",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "horizontal", label: this._t("editor_lights_dimmer_orientation_horizontal") },
+              { value: "vertical", label: this._t("editor_lights_dimmer_orientation_vertical") },
+            ],
+          },
+        },
+      },
+      { name: "max_items", selector: { number: { min: 1, max: 50, mode: "box" } } },
+      { name: "tile_size", selector: { number: { min: 32, max: 400, mode: "box" } } },
+      {
+        name: "update_mode",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "live", label: this._t("editor_lights_dimmer_update_mode_live") },
+              { value: "release", label: this._t("editor_lights_dimmer_update_mode_release") },
+            ],
+          },
+        },
+      },
     ];
   }
 
@@ -265,6 +307,10 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       double_tap_action: "editor_lights_double_tap_action",
       title: "editor_lights_popup_title",
       inherit_filters: "editor_lights_popup_inherit",
+      orientation: "editor_lights_dimmer_orientation",
+      max_items: "editor_lights_dimmer_max_items",
+      tile_size: "editor_lights_dimmer_tile_size",
+      update_mode: "editor_lights_dimmer_update_mode",
       animation: "editor_progress_animation",
       glass_background: "editor_glass_background",
       ...radiusLabelMap,
@@ -329,6 +375,30 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
   private _popupChanged(ev: CustomEvent): void {
     if (!this._config) return;
     this._config = { ...this._config, popup: { ...(this._config.popup ?? {}), ...ev.detail.value } };
+    fireEvent(this, "config-changed", { config: this._config });
+  }
+
+  // Splits the combined form back into the top-level popup fields it shares
+  // with "default-grid" (title/inherit_filters/exclude_*/group_handling) and
+  // the dimmer-only display/behavior fields, which nest under popup.dimmer.
+  private _dimmerPopupChanged(ev: CustomEvent): void {
+    if (!this._config) return;
+    const value = ev.detail.value as {
+      orientation?: LightsDimmerOrientation;
+      max_items?: number;
+      tile_size?: number;
+      update_mode?: LightsDimmerUpdateMode;
+      [key: string]: unknown;
+    };
+    const { orientation, max_items, tile_size, update_mode, ...popupFields } = value;
+    this._config = {
+      ...this._config,
+      popup: {
+        ...(this._config.popup ?? {}),
+        ...popupFields,
+        dimmer: { ...(this._config.popup?.dimmer ?? {}), orientation, max_items, tile_size, update_mode },
+      },
+    };
     fireEvent(this, "config-changed", { config: this._config });
   }
 
@@ -473,6 +543,13 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       exclude_entities: popup.exclude_entities ?? [],
       group_handling: popup.group_handling ?? cfg.group_handling ?? "all",
     };
+    const dimmerPopupData = {
+      ...popupData,
+      orientation: popup.dimmer?.orientation ?? "horizontal",
+      max_items: popup.dimmer?.max_items,
+      tile_size: popup.dimmer?.tile_size,
+      update_mode: popup.dimmer?.update_mode ?? "live",
+    };
 
     const animationData = { animation: cfg.animation ?? "auto" };
 
@@ -582,6 +659,18 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
                           .schema=${this._popupSchema()}
                           .computeLabel=${this._computeLabel}
                           @value-changed=${this._popupChanged}
+                        ></ha-form>
+                      `
+                    : nothing}
+
+                  ${popupMode === "dimmer"
+                    ? html`
+                        <ha-form
+                          .hass=${this.hass}
+                          .data=${dimmerPopupData}
+                          .schema=${this._dimmerPopupSchema()}
+                          .computeLabel=${this._computeLabel}
+                          @value-changed=${this._dimmerPopupChanged}
                         ></ha-form>
                       `
                     : nothing}

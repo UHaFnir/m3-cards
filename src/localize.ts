@@ -1961,6 +1961,7 @@ const translations = {
     editor_lights_popup_mode: "Ansicht",
     editor_lights_popup_mode_default_grid: "Übersichts-Raster (gefiltert)",
     editor_lights_popup_mode_default_detail: "Standard-Detailansicht",
+    editor_lights_popup_mode_dimmer: "Dimmer (Helligkeitsregler)",
     editor_lights_popup_mode_custom: "Eigene Karte",
     editor_lights_popup_mode_default_detail_hint:
       "Öffnet Home Assistants eigenen Mehr-Info-Dialog des ersten schaltbaren Lichts — keine eigene Karte.",
@@ -4298,6 +4299,7 @@ const translations = {
     editor_lights_popup_mode: "View",
     editor_lights_popup_mode_default_grid: "Overview grid (filtered)",
     editor_lights_popup_mode_default_detail: "Default detail view",
+    editor_lights_popup_mode_dimmer: "Dimmer (brightness sliders)",
     editor_lights_popup_mode_custom: "Custom card",
     editor_lights_popup_mode_default_detail_hint:
       "Opens Home Assistant's own more-info dialog for the first switchable light — no card of ours involved.",

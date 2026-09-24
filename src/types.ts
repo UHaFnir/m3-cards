@@ -2735,7 +2735,7 @@ export interface LightsOverviewManualRoomConfig {
 // "default-grid" — today's original behaviour: this same card again,
 // re-scoped to the tapped tile's area/entities (the fields below).
 // "custom" — an arbitrary Lovelace card built from `card`.
-export type LightsOverviewPopupMode = "default-detail" | "default-grid" | "custom";
+export type LightsOverviewPopupMode = "default-detail" | "default-grid" | "dimmer" | "custom";
 
 export interface LightsOverviewPopupConfig extends EntityFilterConfig {
   mode?: LightsOverviewPopupMode;
@@ -2747,6 +2747,24 @@ export interface LightsOverviewPopupConfig extends EntityFilterConfig {
   show_header?: boolean;
   group_handling?: LightGroupHandling;
   toggle_group_handling?: LightGroupHandling;
+  /** Only used when `mode` is "dimmer" — display/behavior overrides for the
+   * dimmer overview popup (not the entity filter, which is scoped from the
+   * tapped tile the same way "default-grid" is). */
+  dimmer?: Partial<
+    Pick<
+      M3LightsDimmerOverviewCardConfig,
+      | "orientation"
+      | "columns"
+      | "tile_size"
+      | "max_items"
+      | "update_mode"
+      | "transition"
+      | "show_name"
+      | "show_icon"
+      | "show_state"
+      | "show_area"
+    >
+  >;
   /** Only used when `mode` is "custom" — an arbitrary Lovelace card config
    * skeleton that replaces the popup entirely. Any string value inside may
    * reference `[[area_id]]`, `[[entity_id]]`, `[[name]]`, resolved against
