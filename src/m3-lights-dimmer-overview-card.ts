@@ -427,6 +427,11 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
     const sliderHeight = orientation === "vertical" ? tileSize - nameBelowHeight : tileSize;
 
     const tileBg = tintOn(this, activeColor, undefined, tile.on ? 20 : 10);
+    // The card-level --m3p-icon-color (header swatch) is calibrated against
+    // the header's own, much lighter well — reusing it here under-contrasts
+    // against a tile's more saturated tint, so each tile gets its own icon
+    // color measured against its own background instead.
+    const tileIconColor = foregroundOn(activeColor, tileBg);
 
     // Vertical's background/radius live on .tile-wrap, not the slider — the
     // name row sits below the slider but still has to read as part of the
@@ -435,11 +440,11 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
     // the slider's own bottom edge.
     const sizeStyle =
       orientation === "horizontal"
-        ? `height: ${sliderHeight}px; background: ${tileBg}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px;`
+        ? `height: ${sliderHeight}px; background: ${tileBg}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px; --tile-icon-color: ${tileIconColor};`
         : `width: 100%; height: ${sliderHeight}px;`;
     const wrapStyle =
       orientation === "vertical"
-        ? `width: ${columnWidth ?? `${tileSize}px`}; flex: 0 0 ${columnWidth ?? `${Math.max(tileSize, LIGHTS_DIMMER_VERTICAL_MIN_COL)}px`}; height: 100%; background: ${tileBg}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px;`
+        ? `width: ${columnWidth ?? `${tileSize}px`}; flex: 0 0 ${columnWidth ?? `${Math.max(tileSize, LIGHTS_DIMMER_VERTICAL_MIN_COL)}px`}; height: 100%; background: ${tileBg}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px; --tile-icon-color: ${tileIconColor};`
         : "";
 
     const slider = html`
@@ -561,7 +566,7 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
       .tile-content ha-icon {
         flex-shrink: 0;
         --mdc-icon-size: 20px;
-        color: var(--m3p-icon-color, var(--m3p-text));
+        color: var(--tile-icon-color, var(--m3p-text));
       }
 
       .tile-name {
