@@ -1951,6 +1951,10 @@ export const LIGHTS_DIMMER_TILE_SIZE_VERTICAL = 180;
 export const LIGHTS_DIMMER_VERTICAL_MIN_COL = 72;
 export const LIGHTS_DIMMER_WAVE_THICKNESS = 28;
 export const LIGHTS_DIMMER_WAVE_STROKE = 8;
+// Vertical tiles: the name sits below the slider, not overlaid on it (see
+// m3-lights-dimmer-overview-card's tile layout), so the column's own height
+// splits between the two — this is the name row's fixed share.
+export const LIGHTS_DIMMER_VERTICAL_NAME_HEIGHT = 24;
 
 export const DEFAULT_GROUP_RADIUS = RADIUS.card;
 export const DEFAULT_GROUP_GAP = 8;

@@ -130,6 +130,7 @@ export class M3LightsDimmerOverviewCardEditor extends LitElement implements Love
   private _displaySchema(): SchemaEntry[] {
     const cfg = this._config;
     const orientation = cfg?.orientation ?? "horizontal";
+    const view = cfg?.view ?? "entities";
     const fields: SchemaEntry[] = [
       { name: "name", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
@@ -169,9 +170,14 @@ export class M3LightsDimmerOverviewCardEditor extends LitElement implements Love
       { name: "show_name", selector: { boolean: {} } },
       { name: "show_icon", selector: { boolean: {} } },
       { name: "show_state", selector: { boolean: {} } },
-      { name: "show_area", selector: { boolean: {} } },
       { name: "show_header", selector: { boolean: {} } },
     );
+    if (view === "entities") {
+      fields.push(
+        { name: "show_area", selector: { boolean: {} } },
+        { name: "strip_area_from_name", selector: { boolean: {} } },
+      );
+    }
     return fields;
   }
 
@@ -261,6 +267,7 @@ export class M3LightsDimmerOverviewCardEditor extends LitElement implements Love
       show_icon: "editor_lights_dimmer_show_icon",
       show_state: "editor_lights_dimmer_show_state",
       show_area: "editor_lights_show_area",
+      strip_area_from_name: "editor_lights_dimmer_strip_area_from_name",
       show_header: "editor_show_header",
       update_mode: "editor_lights_dimmer_update_mode",
       transition: "editor_lights_dimmer_transition",
@@ -420,10 +427,13 @@ export class M3LightsDimmerOverviewCardEditor extends LitElement implements Love
       show_name: cfg.show_name ?? true,
       show_icon: cfg.show_icon ?? true,
       show_state: cfg.show_state ?? true,
-      show_area: cfg.show_area ?? true,
       show_header: cfg.show_header ?? true,
     };
     if ((cfg.orientation ?? "horizontal") === "horizontal") displayData.columns = cfg.columns ?? 1;
+    if ((cfg.view ?? "entities") === "entities") {
+      displayData.show_area = cfg.show_area ?? true;
+      displayData.strip_area_from_name = cfg.strip_area_from_name ?? true;
+    }
 
     const behaviorData = {
       update_mode: cfg.update_mode ?? "live",

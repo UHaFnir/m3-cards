@@ -2847,6 +2847,9 @@ export interface M3LightsDimmerOverviewCardConfig extends EntityFilterConfig {
   show_icon?: boolean;
   show_state?: boolean;
   show_area?: boolean;
+  /** entities view only: drops the area's own name out of a light's shown
+   * name ("Licht Wohnzimmer" -> "Licht") — see shared/entity-naming.ts. */
+  strip_area_from_name?: boolean;
   use_light_color?: boolean;
   tap_action?: HaActionConfig;
   hold_action?: HaActionConfig;

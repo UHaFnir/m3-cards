@@ -4404,6 +4404,7 @@ only; the entity filter is always scoped from the tapped room, the same way
 | `show_header` | boolean | `true` | Card header |
 | `show_name` / `show_icon` / `show_state` | boolean | `true` | Tile content |
 | `show_area` | boolean | `true` in `entities` view | Room name caption |
+| `strip_area_from_name` | boolean | `true` | `entities` view only: drops the area's own name out of a light's shown name ("Licht Wohnzimmer" → "Licht") |
 | `use_light_color` | boolean | `true` | Accent a tile with the light's own color |
 | `tap_action` / `hold_action` / `double_tap_action` | action config | toggle / more-info / none | Tap/hold/double-tap actions |
 | `accent_color` / `off_color` / `track_color` | string | theme default | Slider colors, as on the Light card |

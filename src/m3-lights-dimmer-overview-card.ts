@@ -21,6 +21,7 @@ import {
   LIGHTS_DIMMER_TILE_SIZE_HORIZONTAL,
   LIGHTS_DIMMER_TILE_SIZE_VERTICAL,
   LIGHTS_DIMMER_VERTICAL_MIN_COL,
+  LIGHTS_DIMMER_VERTICAL_NAME_HEIGHT,
   LIGHTS_DIMMER_WAVE_THICKNESS,
   LIGHTS_DIMMER_WAVE_STROKE,
   resolveCornerRadius,
@@ -35,6 +36,7 @@ import { buildStatePredicate, hasStateFilter, mergeEntityFilters, pickEntityFilt
 import { guessRoomIcon } from "./shared/room-icons";
 import { toggleLightSet, setLightSetBrightness, isDimmable, setBrightnessAverage } from "./shared/light-control";
 import { viewportSize } from "./shared/lights-dimmer-layout";
+import { stripAreaFromEntityName } from "./shared/entity-naming";
 import { runHaAction, navigateTo, type RunActionContext } from "./shared/actions";
 import { discoveryChangeMatters } from "./shared/should-update";
 import { localize, type TranslationKey } from "./localize";
@@ -208,6 +210,7 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
         }));
 
     if (view === "entities") {
+      const stripArea = cfg.strip_area_from_name !== false;
       return rooms.flatMap((room) => {
         const switchableSet = new Set(room.toggleEntities);
         return room.entities
@@ -219,9 +222,10 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
             const brightness255 = st.attributes.brightness as number | undefined;
             const pct = on && brightness255 !== undefined ? Math.round((brightness255 / 255) * 100) : on ? 100 : 0;
             const rgb = st.attributes.rgb_color as [number, number, number] | undefined;
+            const rawName = (st.attributes.friendly_name as string | undefined) ?? id;
             return {
               key: `entity:${id}`,
-              name: (st.attributes.friendly_name as string | undefined) ?? id,
+              name: stripArea ? stripAreaFromEntityName(rawName, room.name) : rawName,
               icon: (st.attributes.icon as string | undefined) ?? (on ? "mdi:lightbulb" : "mdi:lightbulb-outline"),
               entities: [id],
               switchable: switchableSet.has(id) ? [id] : [],
@@ -371,7 +375,7 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
     });
 
     const scrollStyle = [
-      orientation === "horizontal" ? `grid-template-columns: repeat(${columns}, 1fr);` : "",
+      orientation === "horizontal" ? `grid-template-columns: repeat(${columns}, 1fr);` : `height: ${tileSize}px;`,
       maxHeight ? `max-height: ${maxHeight};` : "",
     ].join("");
 
@@ -399,7 +403,7 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
     const showName = cfg.show_name !== false;
     const showIcon = cfg.show_icon !== false;
     const showState = cfg.show_state !== false;
-    const showArea = cfg.show_area !== false && (cfg.view ?? "entities") === "entities" && tile.areaName;
+    const showArea = cfg.show_area !== false && (cfg.view ?? "entities") === "entities" && !!tile.areaName;
 
     const offColor = cfg.off_color ? resolveThemeColor(cfg.off_color) : LIGHT_OFF_COLOR;
     const baseAccent = cfg.accent_color ? resolveThemeColor(cfg.accent_color) : DEFAULT_LIGHT_ACCENT;
@@ -415,12 +419,30 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
     const hasHold = this._resolveAction("hold").action !== "none";
     const hasDoubleTap = this._resolveAction("double_tap").action !== "none";
 
+    // Vertical tiles put the name below the slider instead of overlaying it
+    // (see the .tile-wrap/.tile-name-below CSS below), so the slider itself
+    // only gets the column's height minus that row — horizontal keeps the
+    // full tileSize, its name lives inside the slider's own content row.
+    const nameBelowHeight = orientation === "vertical" && showName ? LIGHTS_DIMMER_VERTICAL_NAME_HEIGHT : 0;
+    const sliderHeight = orientation === "vertical" ? tileSize - nameBelowHeight : tileSize;
+
+    const tileBg = tintOn(this, activeColor, undefined, tile.on ? 20 : 10);
+
+    // Vertical's background/radius live on .tile-wrap, not the slider — the
+    // name row sits below the slider but still has to read as part of the
+    // same tile, not a caption floating on the card's own background, so the
+    // tinted, rounded surface has to span both rows instead of stopping at
+    // the slider's own bottom edge.
     const sizeStyle =
       orientation === "horizontal"
-        ? `height: ${tileSize}px;`
-        : `width: ${columnWidth ?? `${tileSize}px`}; flex: 0 0 ${columnWidth ?? `${Math.max(tileSize, LIGHTS_DIMMER_VERTICAL_MIN_COL)}px`}; height: 100%;`;
+        ? `height: ${sliderHeight}px; background: ${tileBg}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px;`
+        : `width: 100%; height: ${sliderHeight}px;`;
+    const wrapStyle =
+      orientation === "vertical"
+        ? `width: ${columnWidth ?? `${tileSize}px`}; flex: 0 0 ${columnWidth ?? `${Math.max(tileSize, LIGHTS_DIMMER_VERTICAL_MIN_COL)}px`}; height: 100%; background: ${tileBg}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px;`
+        : "";
 
-    return html`
+    const slider = html`
       <m3-wave-slider
         class="tile"
         orientation=${orientation}
@@ -434,7 +456,7 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
         ?hasHold=${hasHold}
         ?hasDoubleTap=${hasDoubleTap}
         label=${tile.name}
-        style=${`${sizeStyle} --wave-slider-accent: ${activeColor}; --wave-slider-track: ${trackColor}; --wave-slider-handle: ${handleColor}; --wave-slider-thickness: ${LIGHTS_DIMMER_WAVE_THICKNESS}px; --wave-slider-stroke: ${LIGHTS_DIMMER_WAVE_STROKE}px; background: ${tintOn(this, activeColor, undefined, tile.on ? 20 : 10)}; border-radius: ${LIGHTS_DIMMER_TILE_RADIUS}px;`}
+        style=${`${sizeStyle} --wave-slider-accent: ${activeColor}; --wave-slider-track: ${trackColor}; --wave-slider-handle: ${handleColor}; --wave-slider-thickness: ${LIGHTS_DIMMER_WAVE_THICKNESS}px; --wave-slider-stroke: ${LIGHTS_DIMMER_WAVE_STROKE}px;`}
         @slider-tap=${() => this._runAction(tile, "tap")}
         @slider-hold=${() => this._runAction(tile, "hold")}
         @slider-double-tap=${() => this._runAction(tile, "double_tap")}
@@ -442,15 +464,36 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
         @slider-commit=${(e: CustomEvent<{ value: number }>) => this._handleCommit(tile, e.detail.value)}
         @slider-drag=${(e: CustomEvent<{ dragging: boolean }>) => this._handleDrag(tile, e.detail.dragging)}
       >
-        <div class="tile-content ${orientation}">
-          ${showIcon ? html`<ha-icon icon=${tile.icon}></ha-icon>` : nothing}
-          <div class="tile-text">
-            ${showName ? html`<span class="tile-name">${tile.name}</span>` : nothing}
-            ${showArea ? html`<span class="tile-area">${tile.areaName}</span>` : nothing}
-          </div>
-          ${showState ? html`<span class="tile-pct">${stateLabel}</span>` : nothing}
-        </div>
+        ${orientation === "horizontal"
+          ? html`
+              <div class="tile-content horizontal">
+                ${showIcon ? html`<ha-icon icon=${tile.icon}></ha-icon>` : nothing}
+                <span class="tile-name">
+                  ${showName ? tile.name : nothing}${showArea
+                    ? html`<span class="tile-area">${showName ? " · " : ""}${tile.areaName}</span>`
+                    : nothing}
+                </span>
+                ${showState ? html`<span class="tile-pct">${stateLabel}</span>` : nothing}
+              </div>
+            `
+          : html`
+              <div class="tile-content vertical">
+                ${showIcon ? html`<ha-icon icon=${tile.icon}></ha-icon>` : nothing}
+                ${showState ? html`<span class="tile-pct">${stateLabel}</span>` : nothing}
+              </div>
+            `}
       </m3-wave-slider>
+    `;
+
+    if (orientation === "horizontal") return slider;
+
+    return html`
+      <div class="tile-wrap" style=${wrapStyle}>
+        ${slider}
+        ${showName
+          ? html`<div class="tile-name-below" style=${`height: ${nameBelowHeight}px;`}>${tile.name}</div>`
+          : nothing}
+      </div>
     `;
   }
 
@@ -470,6 +513,7 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
       .tile-scroll.vertical {
         display: flex;
         flex-direction: row;
+        align-items: flex-start;
         overflow-x: auto;
         overflow-y: hidden;
         scroll-snap-type: x proximity;
@@ -478,10 +522,21 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
 
       .tile {
         display: block;
-        scroll-snap-align: start;
         box-sizing: border-box;
         padding: 8px 10px;
         overflow: hidden;
+      }
+
+      .tile-scroll:not(.vertical) > .tile {
+        scroll-snap-align: start;
+      }
+
+      .tile-wrap {
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        overflow: hidden;
+        scroll-snap-align: start;
       }
 
       .tile-content {
@@ -489,7 +544,10 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
         /* Top-aligned, not centered: the wave draws in a fixed-height strip
            at the bottom of the tile (see shared/wave-slider.ts's .wave), so
            the row has to stay clear of it rather than spread across the
-           full tile height. */
+           full tile height. Vertical keeps the same rule for the same
+           reason, just along the width instead of the height — its name
+           lives below the slider (.tile-name-below) precisely so this row
+           never has to share vertical space with the wave either. */
         align-items: flex-start;
         gap: 8px;
         width: 100%;
@@ -497,7 +555,6 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
       }
 
       .tile-content.vertical {
-        flex-direction: column;
         justify-content: space-between;
       }
 
@@ -507,22 +564,12 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
         color: var(--m3p-icon-color, var(--m3p-text));
       }
 
-      .tile-text {
-        display: flex;
-        flex-direction: column;
+      .tile-name {
+        display: block;
         min-width: 0;
         flex: 1;
-      }
-
-      .tile-content.vertical .tile-text {
-        flex: 0;
-        align-items: center;
-        text-align: center;
-      }
-
-      .tile-name {
-        font-size: 13px;
-        font-weight: 500;
+        font-size: 15px;
+        font-weight: 600;
         color: var(--m3p-text);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -533,6 +580,15 @@ export class M3LightsDimmerOverviewCard extends TemplatedCard(LitElement) implem
         font-size: 11px;
         opacity: 0.6;
         color: var(--m3p-secondary-text);
+      }
+
+      .tile-name-below {
+        box-sizing: border-box;
+        padding: 2px 8px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+        color: var(--m3p-text);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
