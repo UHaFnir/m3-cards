@@ -158,6 +158,12 @@ export class M3WaveSlider extends LitElement {
   private _tileStartX = 0;
   private _tileStartY = 0;
   private _tileDragActive = false;
+  // Tile mode decides "is this a drag?" from pointermove alone (no drag
+  // starts on pointerdown the way slider mode's does), so it has to know
+  // whether a pointer is actually down — a mouse fires pointermove on plain
+  // hover too, and without this guard that hover would diff against the
+  // stale _tileStartX/Y default (0,0) and read as a huge, spurious drag.
+  private _tilePointerActive = false;
 
   private readonly _tapHold = new TapHold({
     hasHold: () => this.hasHold,
@@ -358,6 +364,7 @@ export class M3WaveSlider extends LitElement {
     this._tileStartX = e.clientX;
     this._tileStartY = e.clientY;
     this._tileDragActive = false;
+    this._tilePointerActive = true;
     this._tapHold.down(e);
   };
 
@@ -368,6 +375,7 @@ export class M3WaveSlider extends LitElement {
       this._updateDrag(this._valueFromEvent(e));
       return;
     }
+    if (!this._tilePointerActive) return;
     this._tapHold.move(e);
     if (!this._tileDragActive) {
       const dx = e.clientX - this._tileStartX;
@@ -391,6 +399,7 @@ export class M3WaveSlider extends LitElement {
       this._commitDrag(this._dragValue ?? this._valueFromEvent(e));
     }
     this._tileDragActive = false;
+    this._tilePointerActive = false;
   };
 
   private _handlePointerCancel = (e: PointerEvent): void => {
@@ -408,6 +417,7 @@ export class M3WaveSlider extends LitElement {
       this._fire("slider-drag", { dragging: false });
     }
     this._tileDragActive = false;
+    this._tilePointerActive = false;
   };
 
   private _handleClick = (): void => {
