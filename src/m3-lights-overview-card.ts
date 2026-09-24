@@ -31,9 +31,11 @@ import {
   buildStatePredicate,
   hasStateFilter,
   mergeEntityFilters,
+  pickEntityFilter,
   type EntityFilterConfig,
 } from "./shared/entity-filter";
 import { guessRoomIcon } from "./shared/room-icons";
+import { toggleLightSet } from "./shared/light-control";
 import { TapHoldGesture } from "./shared/gestures";
 import { runHaAction, navigateTo } from "./shared/actions";
 import {
@@ -71,23 +73,6 @@ interface LightsOverviewTile {
   areaName?: string;
   /** Room name shown under an individual light, in the "entities" view. */
   secondary?: string;
-}
-
-// The 8-key subset every EntityFilterConfig consumer wants, pulled off the
-// card config once — kept separate from the full config so the discovery
-// dedup key (below) doesn't change on every unrelated edit (a color tweak,
-// an action change), which would trigger a needless re-discovery.
-function configFilter(config: M3LightsOverviewCardConfig): EntityFilterConfig {
-  return {
-    include_area: config.include_area,
-    exclude_area: config.exclude_area,
-    include_entities: config.include_entities,
-    exclude_entities: config.exclude_entities,
-    include_labels: config.include_labels,
-    exclude_labels: config.exclude_labels,
-    include_state: config.include_state,
-    exclude_state: config.exclude_state,
-  };
 }
 
 @customElement("m3-lights-overview-card")
@@ -170,7 +155,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         ...new Set([...(override.exclude_entities ?? []), ...cfg.exclude_toggle_entities]),
       ];
     }
-    return mergeEntityFilters(configFilter(cfg), override, cfg.toggle_inherit_filters ?? true);
+    return mergeEntityFilters(pickEntityFilter(cfg), override, cfg.toggle_inherit_filters ?? true);
   }
 
   private _maybeDiscover(): void {
@@ -178,7 +163,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     if (!this.hass || !cfg || cfg.rooms?.length || !(cfg.auto_discover ?? true) || this._discoverInFlight) {
       return;
     }
-    const filter = configFilter(cfg);
+    const filter = pickEntityFilter(cfg);
     const toggleFilter = this._toggleFilter();
     const key = JSON.stringify({
       filter,
@@ -210,7 +195,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     const cfg = this._config;
     const hass = this.hass;
     const view = cfg.view ?? "rooms";
-    const filter = configFilter(cfg);
+    const filter = pickEntityFilter(cfg);
     const toggleFilter = this._toggleFilter();
     // State changes far more often than area/label assignment, so unlike the
     // area filter this is re-evaluated live here rather than baked into
@@ -309,18 +294,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     return [...tiles].sort((a, b) => a.name.localeCompare(b.name, this._language));
   }
 
-  // Any light on means the room reads as on, so a tap turns everything off —
-  // a plain toggle would flip each lamp individually and leave a chequerboard.
-  //
-  // `homeassistant` rather than `light`, because a room's lighting is not
-  // always in the light domain: a lamp on a smart plug is a `switch`, and a
-  // manual room takes whatever entity ids it is given. `light.turn_on` simply
-  // fails on those. The generic service covers every switchable domain, and
-  // for a real light it does exactly what `light.turn_on` did.
   private _toggleRoom(tile: LightsOverviewTile): void {
-    if (!this.hass || tile.switchable.length === 0) return;
-    const anyOn = tile.switchable.some((id) => this.hass!.states[id]?.state === "on");
-    this.hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", {}, { entity_id: tile.switchable });
+    if (!this.hass) return;
+    toggleLightSet(this.hass, tile.switchable);
   }
 
   private _defaultAction(kind: ActionKind): HaActionConfig {
@@ -409,7 +385,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     const cfg = this._config;
     if (!cfg) return undefined;
     const popup = cfg.popup ?? {};
-    const merged = mergeEntityFilters(configFilter(cfg), popup, popup.inherit_filters ?? true);
+    const merged = mergeEntityFilters(pickEntityFilter(cfg), popup, popup.inherit_filters ?? true);
     // A tile from an area re-runs discovery scoped to that area, which also
     // picks up anything added to the room since. A tile from a manual `rooms`
     // entry cannot: discovery drops entities that have no area, and a manual

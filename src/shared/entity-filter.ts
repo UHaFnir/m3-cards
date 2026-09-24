@@ -16,6 +16,23 @@ export interface EntityFilterConfig {
   exclude_state?: string[];
 }
 
+// The 8-key subset every EntityFilterConfig consumer wants, pulled off a
+// card config once — kept separate from the full config so a discovery dedup
+// key built from it doesn't change on every unrelated edit (a color tweak,
+// an action change), which would trigger a needless re-discovery.
+export function pickEntityFilter(config: EntityFilterConfig): EntityFilterConfig {
+  return {
+    include_area: config.include_area,
+    exclude_area: config.exclude_area,
+    include_entities: config.include_entities,
+    exclude_entities: config.exclude_entities,
+    include_labels: config.include_labels,
+    exclude_labels: config.exclude_labels,
+    include_state: config.include_state,
+    exclude_state: config.exclude_state,
+  };
+}
+
 export interface FilterEntityContext {
   entityId: string;
   areaId?: string;
