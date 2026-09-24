@@ -129,7 +129,13 @@ export class M3WaveSlider extends LitElement {
   @state() private _measuredLength = DEFAULT_LENGTH;
   @state() private _measuredThickness = LIGHT_WAVE_HEIGHT;
 
+  // `.root` is the full tile — pointer capture, value-from-pointer and the
+  // slotted content all measure/listen against it. `.wave` is the thinner
+  // (or, for vertical, full-height but narrow) strip the wave/handle
+  // actually draw in — see the CSS comment on `.wave` for why it's a
+  // separate box instead of `.root` itself.
   @query(".root") private _rootEl?: HTMLDivElement;
+  @query(".wave") private _waveEl?: HTMLDivElement;
 
   private _committedValue?: number;
   private _settleTimer?: number;
@@ -197,13 +203,13 @@ export class M3WaveSlider extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     super.updated(changed);
-    if (this._rootEl && !this._resizeObserver) {
+    if (this._waveEl && !this._resizeObserver) {
       this._resizeObserver = new ResizeObserver((entries) => {
         const rect = entries[0]?.contentRect;
         if (rect) this._applyMeasuredRect(rect.width, rect.height);
       });
-      this._resizeObserver.observe(this._rootEl);
-      const rect = this._rootEl.getBoundingClientRect();
+      this._resizeObserver.observe(this._waveEl);
+      const rect = this._waveEl.getBoundingClientRect();
       this._applyMeasuredRect(rect.width, rect.height);
     }
   }
@@ -487,15 +493,17 @@ export class M3WaveSlider extends LitElement {
         @mousemove=${this._swipeGuard}
         @keydown=${this._handleKeydown}
       >
-        <svg class="wave-svg" viewBox="0 0 ${viewBoxW} ${viewBoxH}" preserveAspectRatio="none">
-          <g transform=${gTransform}>
-            ${hasActive ? svg`<path class="wave-active" d=${activePath} fill="none"></path>` : nothing}
-            ${hasTrack
-              ? svg`<line class="wave-track" x1=${trackStart} y1=${midThickness} x2=${length} y2=${midThickness}></line>`
-              : nothing}
-          </g>
-        </svg>
-        <div class="handle" style=${this._handleStyle(handlePos, handleAlong, handleAcross)}></div>
+        <div class="wave">
+          <svg class="wave-svg" viewBox="0 0 ${viewBoxW} ${viewBoxH}" preserveAspectRatio="none">
+            <g transform=${gTransform}>
+              ${hasActive ? svg`<path class="wave-active" d=${activePath} fill="none"></path>` : nothing}
+              ${hasTrack
+                ? svg`<line class="wave-track" x1=${trackStart} y1=${midThickness} x2=${length} y2=${midThickness}></line>`
+                : nothing}
+            </g>
+          </svg>
+          <div class="handle" style=${this._handleStyle(handlePos, handleAlong, handleAcross)}></div>
+        </div>
         <div class="content"><slot></slot></div>
       </div>
     `;
@@ -505,18 +513,48 @@ export class M3WaveSlider extends LitElement {
     :host {
       display: block;
       outline: none;
+      /* Sizes the element when nothing else does (the light card's slider
+         mode drops it straight into a flex column with no explicit height) —
+         same fallback .wave itself falls back to below, so the two agree. */
+      min-height: var(--wave-slider-thickness, ${LIGHT_WAVE_HEIGHT}px);
+    }
+
+    :host([orientation="vertical"]) {
+      min-height: 0;
+      min-width: var(--wave-slider-thickness, ${LIGHT_WAVE_HEIGHT}px);
     }
 
     .root {
       position: relative;
       width: 100%;
-      height: var(--wave-slider-thickness, ${LIGHT_WAVE_HEIGHT}px);
+      height: 100%;
       cursor: pointer;
       touch-action: none;
       outline: none;
     }
 
-    :host([orientation="vertical"]) .root {
+    /* The wave/handle only ever draw in a thickness-sized strip — a fixed
+       height (or width, vertical) within .root, not the whole tile. In
+       slider mode .root IS exactly that size (see the :host fallback
+       above), so this is a no-op there. In tile mode .root is the whole
+       tile and .content (the slotted icon/name/%, below) needs the full
+       box to lay out in without the wave/handle cutting through it — hence
+       .wave is its own bottom-anchored (horizontal) / full-height
+       (vertical) box instead of sizing .root itself down to it. */
+    .wave {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: var(--wave-slider-thickness, ${LIGHT_WAVE_HEIGHT}px);
+    }
+
+    :host([orientation="vertical"]) .wave {
+      left: 50%;
+      right: auto;
+      bottom: auto;
+      top: 0;
+      transform: translateX(-50%);
       width: var(--wave-slider-thickness, ${LIGHT_WAVE_HEIGHT}px);
       height: 100%;
     }
