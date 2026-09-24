@@ -59,9 +59,11 @@ Same action system as Climate Overview: `tap_action` (default `toggle`) /
 `hold_action` (default `popup`, or `more-info` in `entities` view) /
 `double_tap_action`, with `popup.mode` choosing what hold opens —
 **`default-grid`** (this same card again, scoped to the tapped room),
-**`default-detail`** (HA's more-info dialog), or **`custom`** (an arbitrary
-Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
-`[[name]]` placeholders resolved against the tapped room).
+**`default-detail`** (HA's more-info dialog), **`dimmer`** ([Lights Dimmer
+Overview](#m3-lights-dimmer-overview-card), scoped to the tapped room — its own
+display/behavior options go under `popup.dimmer`), or **`custom`** (an
+arbitrary Lovelace card built from `popup.card`, with `[[area_id]]`,
+`[[entity_id]]`, `[[name]]` placeholders resolved against the tapped room).
 
 ### Configuration options
 
@@ -87,7 +89,7 @@ Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
 | `toggle_inherit_filters` | boolean | `true` | Whether `toggle_filter` narrows the display filter or stands alone |
 | `toggle_group_handling` | `all` \| `prefer_groups` \| `prefer_members` | `group_handling` | `group_handling`, applied to the toggle set instead |
 | `tap_action` / `hold_action` / `double_tap_action` | action config | toggle / popup / none | Tap/hold/double-tap actions; adds a `popup` action kind |
-| `popup` | object (`mode`, `title`, `view`, `sort`, `show_area`, `show_header`, `card`, filter fields) | – | Popup shown by the `popup` action — see above |
+| `popup` | object (`mode`, `title`, `view`, `sort`, `show_area`, `show_header`, `dimmer`, `card`, filter fields) | – | Popup shown by the `popup` action — see above |
 | `on_color` / `off_color` | string | theme default | Tile color by state |
 | `accent_color` / `accent_opacity` | string / number | theme default / `12` | Header icon accent |
 | `tile_tint_opacity` | number | – | Tile background tint strength |
