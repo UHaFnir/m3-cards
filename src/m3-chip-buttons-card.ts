@@ -30,6 +30,8 @@ export class M3ChipButtonsCard extends TemplatedCard(LitElement) implements Love
   @state() private _pressedKey?: string;
 
   private _fades = new ChipRowFadeController();
+  private _rowObserver?: ResizeObserver;
+  private _observedRow?: HTMLElement;
   private _gestures = new TapHoldGesture();
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
@@ -50,6 +52,9 @@ export class M3ChipButtonsCard extends TemplatedCard(LitElement) implements Love
     super.disconnectedCallback();
     this._gestures.cancel();
     this._fades.disconnect();
+    this._rowObserver?.disconnect();
+    this._rowObserver = undefined;
+    this._observedRow = undefined;
   }
 
   // The edge fades on a scrolling row belong on the sides that actually hide
