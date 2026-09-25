@@ -53,7 +53,10 @@ const INACTIVE_ENTITY_COLOR_VAR =
 
 // The three ways a row can handle more chips than fit: stretched to share the
 // width, wrapped onto a second line, or kept on one line and scrolled.
-export function chipRowLayoutClass(config: ChipButtonsRowConfig): "stretch" | "wrap" | "scroll" {
+export function chipRowLayoutClass(
+  config: ChipButtonsRowConfig,
+): "stretch smart" | "stretch" | "wrap" | "scroll" {
+  if (config.stretch === "smart") return "stretch smart";
   return config.stretch ? "stretch" : config.wrap ? "wrap" : "scroll";
 }
 
