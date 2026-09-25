@@ -90,26 +90,63 @@ function normalise(calendarId: string, raw: RawEvent): CalendarEvent {
   };
 }
 
-async function fetchOne(
+/**
+ * One `call_service` round trip for every entity in `entityIds`: HA keys the
+ * response by entity_id regardless of how many targets a call has, so asking
+ * for N calendars costs the same one WS round trip as asking for one. This is
+ * the difference between a card with several calendars loading instantly and
+ * it paying N separate fetches.
+ *
+ * This calls the service directly with `return_response: true` rather than
+ * wrapping it in `execute_script`: a script round trip instantiates a whole
+ * Script object (config validation, template rendering, trace recording) just
+ * to hand back the same response `call_service` already returns on its own,
+ * and that overhead showed up as a full second of extra latency even for a
+ * single calendar.
+ */
+async function fetchBatch(
   hass: HomeAssistant,
-  entityId: string,
+  entityIds: string[],
   start: Date,
   end: Date,
-): Promise<CalendarEvent[]> {
+): Promise<Record<string, CalendarEvent[]>> {
   const response = await hass.callWS<{ response?: Record<string, { events?: RawEvent[] }> }>({
-    type: "execute_script",
-    sequence: [
-      {
-        service: "calendar.get_events",
-        data: { start_date_time: localTimestamp(start), end_date_time: localTimestamp(end) },
-        target: { entity_id: entityId },
-        response_variable: "result",
-      },
-      { stop: "", response_variable: "result" },
-    ],
+    type: "call_service",
+    domain: "calendar",
+    service: "get_events",
+    service_data: { start_date_time: localTimestamp(start), end_date_time: localTimestamp(end) },
+    target: { entity_id: entityIds },
+    return_response: true,
   });
-  const events = response?.response?.[entityId]?.events ?? [];
-  return events.map((e) => normalise(entityId, e));
+  const out: Record<string, CalendarEvent[]> = {};
+  for (const entityId of entityIds) {
+    const events = response?.response?.[entityId]?.events ?? [];
+    out[entityId] = events.map((e) => normalise(entityId, e));
+  }
+  return out;
+}
+
+/**
+ * One promise per entity, backed by a single batch request — but if the
+ * batch itself throws (one bad target can sink a multi-entity service call),
+ * each entity is retried on its own instead, concurrently, so a single
+ * broken calendar cannot take the rest down with it. The caller never sees
+ * the difference: it always gets one promise per entity either way.
+ */
+function fetchMany(
+  hass: HomeAssistant,
+  entityIds: string[],
+  start: Date,
+  end: Date,
+): Record<string, Promise<CalendarEvent[]>> {
+  const batch = fetchBatch(hass, entityIds, start, end).catch(() => undefined);
+  const out: Record<string, Promise<CalendarEvent[]>> = {};
+  for (const entityId of entityIds) {
+    out[entityId] = batch.then(
+      (result) => result?.[entityId] ?? fetchBatch(hass, [entityId], start, end).then((r) => r[entityId] ?? []),
+    );
+  }
+  return out;
 }
 
 /**
@@ -128,26 +165,38 @@ export async function fetchCalendarEvents(
 ): Promise<{ events: CalendarEvent[]; failed: string[] }> {
   const now = Date.now();
   const failed: string[] = [];
+  const startTs = start.getTime();
+  const endTs = end.getTime();
+  const keyOf = (entityId: string): string => `${entityId}|${startTs}|${endTs}`;
+
+  // One pass: cache hits go straight into `promises`, everything else is
+  // queued for `fetchMany` below. This also builds the exact map the final
+  // `Promise.all` reads from, so entities already resolved here are never
+  // looked up in the cache a second time.
+  const promises = new Map<string, Promise<CalendarEvent[]>>();
+  const toFetch: string[] = [];
+  for (const entityId of entityIds) {
+    const hit = cache.get(keyOf(entityId));
+    if (hit && now - hit.ts < CALENDAR_CACHE_MS) promises.set(entityId, hit.promise);
+    else toFetch.push(entityId);
+  }
+
+  if (toFetch.length) {
+    const fetched = fetchMany(hass, toFetch, start, end);
+    for (const entityId of toFetch) {
+      promises.set(entityId, fetched[entityId]);
+      cache.set(keyOf(entityId), { promise: fetched[entityId], ts: now });
+    }
+  }
+
   const results = await Promise.all(
     entityIds.map(async (entityId) => {
-      const key = `${entityId}|${start.getTime()}|${end.getTime()}`;
-      const hit = cache.get(key);
-      if (hit && now - hit.ts < CALENDAR_CACHE_MS) {
-        try {
-          return await hit.promise;
-        } catch {
-          failed.push(entityId);
-          return [];
-        }
-      }
-      const promise = fetchOne(hass, entityId, start, end);
-      cache.set(key, { promise, ts: now });
       try {
-        return await promise;
+        return await promises.get(entityId)!;
       } catch {
         // Do not keep a rejected promise around: the next render would reuse
         // it for five minutes and the calendar could never recover on its own.
-        cache.delete(key);
+        cache.delete(keyOf(entityId));
         failed.push(entityId);
         return [];
       }
