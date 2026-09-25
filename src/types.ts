@@ -2776,7 +2776,7 @@ export interface LightsOverviewManualRoomConfig {
 // "default-grid" — today's original behaviour: this same card again,
 // re-scoped to the tapped tile's area/entities (the fields below).
 // "custom" — an arbitrary Lovelace card built from `card`.
-export type LightsOverviewPopupMode = "default-detail" | "default-grid" | "custom";
+export type LightsOverviewPopupMode = "default-detail" | "default-grid" | "dimmer" | "custom";
 
 export interface LightsOverviewPopupConfig extends EntityFilterConfig {
   mode?: LightsOverviewPopupMode;
@@ -2788,6 +2788,24 @@ export interface LightsOverviewPopupConfig extends EntityFilterConfig {
   show_header?: boolean;
   group_handling?: LightGroupHandling;
   toggle_group_handling?: LightGroupHandling;
+  /** Only used when `mode` is "dimmer" — display/behavior overrides for the
+   * dimmer overview popup (not the entity filter, which is scoped from the
+   * tapped tile the same way "default-grid" is). */
+  dimmer?: Partial<
+    Pick<
+      M3LightsDimmerOverviewCardConfig,
+      | "orientation"
+      | "columns"
+      | "tile_size"
+      | "max_items"
+      | "update_mode"
+      | "transition"
+      | "show_name"
+      | "show_icon"
+      | "show_state"
+      | "show_area"
+    >
+  >;
   /** Only used when `mode` is "custom" — an arbitrary Lovelace card config
    * skeleton that replaces the popup entirely. Any string value inside may
    * reference `[[area_id]]`, `[[entity_id]]`, `[[name]]`, resolved against
@@ -2833,6 +2851,61 @@ export interface M3LightsOverviewCardConfig extends EntityFilterConfig {
   glass_background?: boolean;
   radius?: number;
   corners?: CornerRadiusConfig;
+  card_version?: string;
+}
+
+export type LightsDimmerOrientation = "horizontal" | "vertical";
+export type LightsDimmerUpdateMode = "live" | "release";
+
+export interface M3LightsDimmerOverviewCardConfig extends EntityFilterConfig {
+  type: string;
+  auto_discover?: boolean;
+  include_domains?: string[];
+  rooms?: LightsOverviewManualRoomConfig[];
+  group_handling?: LightGroupHandling;
+  toggle_filter?: EntityFilterConfig;
+  exclude_toggle_entities?: string[];
+  toggle_inherit_filters?: boolean;
+  toggle_group_handling?: LightGroupHandling;
+  sort?: LightsOverviewSort;
+  hide_empty_rooms?: boolean;
+
+  /** One tile per light (default) or one tile per room. */
+  view?: "entities" | "rooms";
+  orientation?: LightsDimmerOrientation;
+  /** How many tiles are visible at once; more scroll rather than being cut off. */
+  max_items?: number;
+  /** Horizontal layout only — ignored (and hidden in the editor) when vertical. */
+  columns?: number;
+  /** Tile thickness (horizontal) or length (vertical), in px. */
+  tile_size?: number;
+  update_mode?: LightsDimmerUpdateMode;
+  transition?: number;
+  name?: string;
+  icon?: string;
+  show_header?: boolean;
+  show_name?: boolean;
+  show_icon?: boolean;
+  show_state?: boolean;
+  show_area?: boolean;
+  /** entities view only: drops the area's own name out of a light's shown
+   * name ("Licht Wohnzimmer" -> "Licht") — see shared/entity-naming.ts. */
+  strip_area_from_name?: boolean;
+  use_light_color?: boolean;
+  tap_action?: HaActionConfig;
+  hold_action?: HaActionConfig;
+  double_tap_action?: HaActionConfig;
+  accent_color?: string;
+  off_color?: string;
+  track_color?: string;
+  text_color?: string;
+  secondary_text_color?: string;
+  card_background?: string;
+  glass_background?: boolean;
+  radius?: number;
+  corners?: CornerRadiusConfig;
+  animation?: "auto" | "on" | "off";
+  wave_style?: LightWaveStyle;
   card_version?: string;
 }
 

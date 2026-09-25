@@ -3,17 +3,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
   LovelaceCardEditor,
-  M3LightsOverviewCardConfig,
+  M3LightsDimmerOverviewCardConfig,
   LightsOverviewManualRoomConfig,
-  LightsOverviewPopupMode,
-  LightsDimmerOrientation,
-  LightsDimmerUpdateMode,
   HaActionConfig,
 } from "./types";
-import { DEFAULT_LIGHTS_OVERVIEW_RADIUS } from "./const";
+import { DEFAULT_LIGHTS_DIMMER_RADIUS } from "./const";
 import { localize, type TranslationKey } from "./localize";
-import { fireEvent, colorRow, opacityRow, editorStyles, type SchemaEntry } from "./shared/editor-helpers";
-import { renderDetailCardField } from "./shared/detail-card-editor";
+import { fireEvent, colorRow, editorStyles, type SchemaEntry } from "./shared/editor-helpers";
 import { radiusLabelMap } from "./shared/radius-editor";
 import {
   initAppearanceState,
@@ -23,26 +19,20 @@ import {
   type AppearanceState,
 } from "./shared/appearance-editor";
 
-type LightsOverviewColorField =
-  | "on_color"
-  | "off_color"
-  | "accent_color"
-  | "text_color"
-  | "secondary_text_color"
-  | "card_background";
+type DimmerColorField = "accent_color" | "off_color" | "track_color" | "text_color" | "secondary_text_color" | "card_background";
 
 const ACTION_KEYS = ["tap_action", "hold_action", "double_tap_action"] as const;
 
-@customElement("m3-lights-overview-card-editor")
-export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCardEditor {
+@customElement("m3-lights-dimmer-overview-card-editor")
+export class M3LightsDimmerOverviewCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
-  @state() private _config?: M3LightsOverviewCardConfig;
+  @state() private _config?: M3LightsDimmerOverviewCardConfig;
   @state() private _appearance: AppearanceState = { showCustomRadius: false, showCorners: false, cornerCustom: {} };
 
-  public setConfig(config: M3LightsOverviewCardConfig): void {
+  public setConfig(config: M3LightsDimmerOverviewCardConfig): void {
     this._config = config;
-    this._appearance = initAppearanceState(config, DEFAULT_LIGHTS_OVERVIEW_RADIUS);
+    this._appearance = initAppearanceState(config, DEFAULT_LIGHTS_DIMMER_RADIUS);
   }
 
   private get _language(): string {
@@ -66,13 +56,14 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     };
   }
 
+  // No "popup" option here — the dimmer overview never opens a popup of its
+  // own (it already is one, in the lights overview's popup mode).
   private _actionSelector() {
     return {
       select: {
         mode: "dropdown" as const,
         options: [
           { value: "toggle", label: this._t("editor_lights_action_toggle") },
-          { value: "popup", label: this._t("editor_lights_action_popup") },
           { value: "more-info", label: this._t("editor_lights_action_more_info") },
           { value: "none", label: this._t("editor_lights_action_none") },
         ],
@@ -80,7 +71,6 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     };
   }
 
-  // Free text as well as the four common states, so exotic states stay reachable.
   private _stateSelector() {
     return {
       select: {
@@ -97,12 +87,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
   }
 
   private _discoverySchema(): SchemaEntry[] {
-    // The entity pickers follow the chosen domains: with `switch` added they
-    // have to offer switches, or the filters cannot name the very entities
-    // discovery just found.
-    const domains = this._config?.include_domains?.length
-      ? this._config.include_domains
-      : ["light"];
+    const domains = this._config?.include_domains?.length ? this._config.include_domains : ["light"];
     return [
       { name: "auto_discover", selector: { boolean: {} } },
       {
@@ -129,6 +114,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       { name: "include_state", selector: this._stateSelector() },
       { name: "exclude_state", selector: this._stateSelector() },
       { name: "group_handling", selector: this._groupHandlingSelector() },
+      { name: "hide_empty_rooms", selector: { boolean: {} } },
     ];
   }
 
@@ -142,7 +128,10 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
   }
 
   private _displaySchema(): SchemaEntry[] {
-    return [
+    const cfg = this._config;
+    const orientation = cfg?.orientation ?? "horizontal";
+    const view = cfg?.view ?? "entities";
+    const fields: SchemaEntry[] = [
       { name: "name", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
       {
@@ -151,83 +140,12 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           select: {
             mode: "dropdown",
             options: [
-              { value: "rooms", label: this._t("editor_lights_view_rooms") },
               { value: "entities", label: this._t("editor_lights_view_entities") },
+              { value: "rooms", label: this._t("editor_lights_view_rooms") },
             ],
           },
         },
       },
-      {
-        name: "sort",
-        selector: {
-          select: {
-            mode: "dropdown",
-            options: [
-              { value: "name", label: this._t("editor_lights_sort_name") },
-              { value: "area", label: this._t("editor_lights_sort_area") },
-              { value: "on_first", label: this._t("editor_lights_sort_on_first") },
-            ],
-          },
-        },
-      },
-      { name: "show_header", selector: { boolean: {} } },
-      { name: "show_count", selector: { boolean: {} } },
-      { name: "show_area", selector: { boolean: {} } },
-      { name: "hide_empty_rooms", selector: { boolean: {} } },
-    ];
-  }
-
-  private _toggleSchema(): SchemaEntry[] {
-    return [
-      { name: "exclude_toggle_entities", selector: { entity: { domain: "light", multiple: true } } },
-      { name: "toggle_inherit_filters", selector: { boolean: {} } },
-      { name: "toggle_group_handling", selector: this._groupHandlingSelector() },
-      { name: "toggle_include_state", selector: this._stateSelector() },
-    ];
-  }
-
-  private _actionSchema(): SchemaEntry[] {
-    return [
-      { name: "tap_action", selector: this._actionSelector() },
-      { name: "hold_action", selector: this._actionSelector() },
-      { name: "double_tap_action", selector: this._actionSelector() },
-    ];
-  }
-
-  private _popupModeSelector() {
-    return {
-      select: {
-        mode: "dropdown" as const,
-        options: [
-          { value: "default-grid", label: this._t("editor_lights_popup_mode_default_grid") },
-          { value: "default-detail", label: this._t("editor_lights_popup_mode_default_detail") },
-          { value: "dimmer", label: this._t("editor_lights_popup_mode_dimmer") },
-          { value: "custom", label: this._t("editor_lights_popup_mode_custom") },
-        ],
-      },
-    };
-  }
-
-  private _popupSchema(): SchemaEntry[] {
-    return [
-      { name: "title", selector: { text: {} } },
-      { name: "inherit_filters", selector: { boolean: {} } },
-      { name: "exclude_labels", selector: { label: { multiple: true } } },
-      { name: "exclude_entities", selector: { entity: { domain: "light", multiple: true } } },
-      { name: "group_handling", selector: this._groupHandlingSelector() },
-    ];
-  }
-
-  // Filter/scope fields shared with "default-grid"'s own popup schema, plus
-  // the dimmer overview's own display/behavior options — the fields
-  // popup.dimmer actually carries (see LightsOverviewPopupConfig.dimmer).
-  private _dimmerPopupSchema(): SchemaEntry[] {
-    return [
-      { name: "title", selector: { text: {} } },
-      { name: "inherit_filters", selector: { boolean: {} } },
-      { name: "exclude_labels", selector: { label: { multiple: true } } },
-      { name: "exclude_entities", selector: { entity: { domain: "light", multiple: true } } },
-      { name: "group_handling", selector: this._groupHandlingSelector() },
       {
         name: "orientation",
         selector: {
@@ -240,8 +158,31 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           },
         },
       },
-      { name: "max_items", selector: { number: { min: 1, max: 50, mode: "box" } } },
+    ];
+    // columns only makes sense in the horizontal layout — vertical is always
+    // a single row of columns, see the dimmer-overview plan's layout table.
+    if (orientation === "horizontal") {
+      fields.push({ name: "columns", selector: { number: { min: 1, max: 6, mode: "box" } } });
+    }
+    fields.push(
       { name: "tile_size", selector: { number: { min: 32, max: 400, mode: "box" } } },
+      { name: "max_items", selector: { number: { min: 1, max: 50, mode: "box" } } },
+      { name: "show_name", selector: { boolean: {} } },
+      { name: "show_icon", selector: { boolean: {} } },
+      { name: "show_state", selector: { boolean: {} } },
+      { name: "show_header", selector: { boolean: {} } },
+    );
+    if (view === "entities") {
+      fields.push(
+        { name: "show_area", selector: { boolean: {} } },
+        { name: "strip_area_from_name", selector: { boolean: {} } },
+      );
+    }
+    return fields;
+  }
+
+  private _behaviorSchema(): SchemaEntry[] {
+    return [
       {
         name: "update_mode",
         selector: {
@@ -254,6 +195,18 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           },
         },
       },
+      { name: "transition", selector: { number: { min: 0, max: 10, step: 0.5, mode: "box" } } },
+      { name: "tap_action", selector: this._actionSelector() },
+      { name: "hold_action", selector: this._actionSelector() },
+      { name: "double_tap_action", selector: this._actionSelector() },
+    ];
+  }
+
+  private _toggleSchema(): SchemaEntry[] {
+    return [
+      { name: "exclude_toggle_entities", selector: { entity: { domain: "light", multiple: true } } },
+      { name: "toggle_inherit_filters", selector: { boolean: {} } },
+      { name: "toggle_group_handling", selector: this._groupHandlingSelector() },
     ];
   }
 
@@ -268,6 +221,18 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
               { value: "auto", label: this._t("editor_progress_animation_auto") },
               { value: "on", label: this._t("editor_progress_animation_on") },
               { value: "off", label: this._t("editor_progress_animation_off") },
+            ],
+          },
+        },
+      },
+      {
+        name: "wave_style",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "wavy", label: this._t("editor_light_wave_style_wavy") },
+              { value: "flat", label: this._t("editor_light_wave_style_flat") },
             ],
           },
         },
@@ -287,31 +252,33 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       exclude_entities: "editor_lights_exclude_entities",
       include_state: "editor_lights_include_state",
       exclude_state: "editor_lights_exclude_state",
-      toggle_include_state: "editor_lights_include_state",
       group_handling: "editor_lights_group_handling",
+      hide_empty_rooms: "editor_lights_hide_empty_rooms",
       name: "editor_name",
       icon: "editor_icon",
       entities: "editor_lights_room_entities",
       toggle_entities: "editor_lights_room_toggle_entities",
       view: "editor_lights_view",
-      sort: "editor_lights_sort",
-      show_header: "editor_show_header",
-      show_count: "editor_lights_show_count",
+      orientation: "editor_lights_dimmer_orientation",
+      columns: "editor_lights_dimmer_columns",
+      tile_size: "editor_lights_dimmer_tile_size",
+      max_items: "editor_lights_dimmer_max_items",
+      show_name: "editor_lights_dimmer_show_name",
+      show_icon: "editor_lights_dimmer_show_icon",
+      show_state: "editor_lights_dimmer_show_state",
       show_area: "editor_lights_show_area",
-      hide_empty_rooms: "editor_lights_hide_empty_rooms",
-      exclude_toggle_entities: "editor_lights_exclude_toggle",
-      toggle_inherit_filters: "editor_lights_toggle_inherit",
-      toggle_group_handling: "editor_lights_toggle_group_handling",
+      strip_area_from_name: "editor_lights_dimmer_strip_area_from_name",
+      show_header: "editor_show_header",
+      update_mode: "editor_lights_dimmer_update_mode",
+      transition: "editor_lights_dimmer_transition",
       tap_action: "editor_lights_tap_action",
       hold_action: "editor_lights_hold_action",
       double_tap_action: "editor_lights_double_tap_action",
-      title: "editor_lights_popup_title",
-      inherit_filters: "editor_lights_popup_inherit",
-      orientation: "editor_lights_dimmer_orientation",
-      max_items: "editor_lights_dimmer_max_items",
-      tile_size: "editor_lights_dimmer_tile_size",
-      update_mode: "editor_lights_dimmer_update_mode",
+      exclude_toggle_entities: "editor_lights_exclude_toggle",
+      toggle_inherit_filters: "editor_lights_toggle_inherit",
+      toggle_group_handling: "editor_lights_toggle_group_handling",
       animation: "editor_progress_animation",
+      wave_style: "editor_light_wave_style",
       glass_background: "editor_glass_background",
       ...radiusLabelMap,
     };
@@ -325,26 +292,6 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     fireEvent(this, "config-changed", { config: this._config });
   }
 
-  // toggle_include_state is a UI-only field that writes into toggle_filter —
-  // the config doesn't have a bare toggle_include_state key.
-  private _toggleChanged(ev: CustomEvent): void {
-    if (!this._config) return;
-    const value = { ...ev.detail.value } as Record<string, unknown>;
-    const includeState = value.toggle_include_state as string[] | undefined;
-    delete value.toggle_include_state;
-    const toggleFilter = { ...(this._config.toggle_filter ?? {}) };
-    if (includeState?.length) toggleFilter.include_state = includeState;
-    else delete toggleFilter.include_state;
-    this._config = {
-      ...this._config,
-      ...value,
-      toggle_filter: Object.keys(toggleFilter).length ? toggleFilter : undefined,
-    };
-    fireEvent(this, "config-changed", { config: this._config });
-  }
-
-  // The form hands back bare action-kind strings; the config stores HA's
-  // object form so navigate/url stay expressible in YAML.
   private _actionsChanged(ev: CustomEvent): void {
     if (!this._config) return;
     const value = ev.detail.value as Record<string, string>;
@@ -353,56 +300,19 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       const action = value[key];
       if (action) patch[key] = { action } as HaActionConfig;
     }
-    this._config = { ...this._config, ...patch };
+    // Non-action fields (update_mode, transition) travel in the same form.
+    const { tap_action: _t1, hold_action: _t2, double_tap_action: _t3, ...rest } = value;
+    this._config = { ...this._config, ...rest, ...patch };
     fireEvent(this, "config-changed", { config: this._config });
   }
 
-  private _popupCardChanged(value: Record<string, unknown> | undefined): void {
+  private _toggleChanged(ev: CustomEvent): void {
     if (!this._config) return;
-    this._config = { ...this._config, popup: { ...(this._config.popup ?? {}), card: value } };
+    this._config = { ...this._config, ...ev.detail.value };
     fireEvent(this, "config-changed", { config: this._config });
   }
 
-  // Kept separate from _popupChanged: a dedicated ha-form so switching the
-  // mode never wipes the other popup fields sitting in the second form.
-  private _popupModeChanged(ev: CustomEvent): void {
-    if (!this._config) return;
-    const mode = (ev.detail.value as { mode: LightsOverviewPopupMode }).mode;
-    this._config = { ...this._config, popup: { ...(this._config.popup ?? {}), mode } };
-    fireEvent(this, "config-changed", { config: this._config });
-  }
-
-  private _popupChanged(ev: CustomEvent): void {
-    if (!this._config) return;
-    this._config = { ...this._config, popup: { ...(this._config.popup ?? {}), ...ev.detail.value } };
-    fireEvent(this, "config-changed", { config: this._config });
-  }
-
-  // Splits the combined form back into the top-level popup fields it shares
-  // with "default-grid" (title/inherit_filters/exclude_*/group_handling) and
-  // the dimmer-only display/behavior fields, which nest under popup.dimmer.
-  private _dimmerPopupChanged(ev: CustomEvent): void {
-    if (!this._config) return;
-    const value = ev.detail.value as {
-      orientation?: LightsDimmerOrientation;
-      max_items?: number;
-      tile_size?: number;
-      update_mode?: LightsDimmerUpdateMode;
-      [key: string]: unknown;
-    };
-    const { orientation, max_items, tile_size, update_mode, ...popupFields } = value;
-    this._config = {
-      ...this._config,
-      popup: {
-        ...(this._config.popup ?? {}),
-        ...popupFields,
-        dimmer: { ...(this._config.popup?.dimmer ?? {}), orientation, max_items, tile_size, update_mode },
-      },
-    };
-    fireEvent(this, "config-changed", { config: this._config });
-  }
-
-  private _colorChanged(field: LightsOverviewColorField, value: string): void {
+  private _colorChanged(field: DimmerColorField, value: string): void {
     if (!this._config) return;
     if (value) {
       this._config = { ...this._config, [field]: value };
@@ -413,9 +323,9 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     fireEvent(this, "config-changed", { config: this._config });
   }
 
-  private _opacityChanged(field: "tile_tint_opacity" | "accent_opacity", value: number): void {
+  private _useLightColorChanged(ev: CustomEvent): void {
     if (!this._config) return;
-    this._config = { ...this._config, [field]: value };
+    this._config = { ...this._config, use_light_color: (ev.detail.value as { use_light_color: boolean }).use_light_color };
     fireEvent(this, "config-changed", { config: this._config });
   }
 
@@ -473,10 +383,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
   private _cornerPresetChanged(key: string, ev: CustomEvent): void {
     if (!this._config) return;
     const patch = cornerPresetPatch(ev.detail.value[key] as string);
-    this._appearance = {
-      ...this._appearance,
-      cornerCustom: { ...this._appearance.cornerCustom, [key]: patch.custom },
-    };
+    this._appearance = { ...this._appearance, cornerCustom: { ...this._appearance.cornerCustom, [key]: patch.custom } };
     if (patch.px !== undefined) {
       this._config = { ...this._config, corners: { ...(this._config.corners ?? {}), [key]: patch.px } };
       fireEvent(this, "config-changed", { config: this._config });
@@ -507,68 +414,46 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       include_state: cfg.include_state ?? [],
       exclude_state: cfg.exclude_state ?? [],
       group_handling: cfg.group_handling ?? "all",
+      hide_empty_rooms: cfg.hide_empty_rooms ?? false,
     };
 
-    const displayData = {
+    const displayData: Record<string, unknown> = {
       name: cfg.name,
       icon: cfg.icon,
-      view: cfg.view ?? "rooms",
-      sort: cfg.sort ?? "name",
+      view: cfg.view ?? "entities",
+      orientation: cfg.orientation ?? "horizontal",
+      tile_size: cfg.tile_size,
+      max_items: cfg.max_items,
+      show_name: cfg.show_name ?? true,
+      show_icon: cfg.show_icon ?? true,
+      show_state: cfg.show_state ?? true,
       show_header: cfg.show_header ?? true,
-      show_count: cfg.show_count ?? true,
-      show_area: cfg.show_area ?? true,
-      hide_empty_rooms: cfg.hide_empty_rooms ?? false,
+    };
+    if ((cfg.orientation ?? "horizontal") === "horizontal") displayData.columns = cfg.columns ?? 1;
+    if ((cfg.view ?? "entities") === "entities") {
+      displayData.show_area = cfg.show_area ?? true;
+      displayData.strip_area_from_name = cfg.strip_area_from_name ?? true;
+    }
+
+    const behaviorData = {
+      update_mode: cfg.update_mode ?? "live",
+      transition: cfg.transition,
+      tap_action: cfg.tap_action?.action ?? "toggle",
+      hold_action: cfg.hold_action?.action ?? "more-info",
+      double_tap_action: cfg.double_tap_action?.action ?? "none",
     };
 
     const toggleData = {
       exclude_toggle_entities: cfg.exclude_toggle_entities ?? [],
       toggle_inherit_filters: cfg.toggle_inherit_filters ?? true,
       toggle_group_handling: cfg.toggle_group_handling ?? cfg.group_handling ?? "all",
-      toggle_include_state: cfg.toggle_filter?.include_state ?? [],
     };
 
-    const defaultHoldAction = (cfg.view ?? "rooms") === "entities" ? "more-info" : "popup";
-    const actionsData = {
-      tap_action: cfg.tap_action?.action ?? "toggle",
-      hold_action: cfg.hold_action?.action ?? defaultHoldAction,
-      double_tap_action: cfg.double_tap_action?.action ?? "none",
-    };
-
-    const popup = cfg.popup ?? {};
-    const popupMode: LightsOverviewPopupMode = popup.mode ?? "default-grid";
-    const popupData = {
-      title: popup.title ?? "",
-      inherit_filters: popup.inherit_filters ?? true,
-      exclude_labels: popup.exclude_labels ?? [],
-      exclude_entities: popup.exclude_entities ?? [],
-      group_handling: popup.group_handling ?? cfg.group_handling ?? "all",
-    };
-    const dimmerPopupData = {
-      ...popupData,
-      orientation: popup.dimmer?.orientation ?? "horizontal",
-      max_items: popup.dimmer?.max_items,
-      tile_size: popup.dimmer?.tile_size,
-      update_mode: popup.dimmer?.update_mode ?? "live",
-    };
-
-    const animationData = { animation: cfg.animation ?? "auto" };
+    const animationData = { animation: cfg.animation ?? "auto", wave_style: cfg.wave_style ?? "wavy" };
 
     return html`
       <div class="editor">
-        <ha-expansion-panel outlined .header=${this._t("editor_content")} expanded>
-          <ha-icon slot="leading-icon" icon="mdi:text-short"></ha-icon>
-          <div class="panel-content">
-            <ha-form
-              .hass=${this.hass}
-              .data=${displayData}
-              .schema=${this._displaySchema()}
-              .computeLabel=${this._computeLabel}
-              @value-changed=${this._valueChanged}
-            ></ha-form>
-          </div>
-        </ha-expansion-panel>
-
-        <ha-expansion-panel outlined .header=${this._t("editor_entities")}>
+        <ha-expansion-panel outlined .header=${this._t("editor_entities")} expanded>
           <ha-icon slot="leading-icon" icon="mdi:home-search-outline"></ha-icon>
           <div class="panel-content">
             <ha-form
@@ -608,13 +493,26 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           </div>
         </ha-expansion-panel>
 
+        <ha-expansion-panel outlined .header=${this._t("editor_content")}>
+          <ha-icon slot="leading-icon" icon="mdi:view-grid-outline"></ha-icon>
+          <div class="panel-content">
+            <ha-form
+              .hass=${this.hass}
+              .data=${displayData}
+              .schema=${this._displaySchema()}
+              .computeLabel=${this._computeLabel}
+              @value-changed=${this._valueChanged}
+            ></ha-form>
+          </div>
+        </ha-expansion-panel>
+
         <ha-expansion-panel outlined .header=${this._t("editor_behavior")}>
           <ha-icon slot="leading-icon" icon="mdi:gesture-tap"></ha-icon>
           <div class="panel-content">
             <ha-form
               .hass=${this.hass}
-              .data=${actionsData}
-              .schema=${this._actionSchema()}
+              .data=${behaviorData}
+              .schema=${this._behaviorSchema()}
               .computeLabel=${this._computeLabel}
               @value-changed=${this._actionsChanged}
             ></ha-form>
@@ -634,91 +532,26 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           </div>
         </ha-expansion-panel>
 
-        ${[actionsData.tap_action, actionsData.hold_action, actionsData.double_tap_action].includes("popup")
-          ? html`
-              <ha-expansion-panel outlined .header=${this._t("editor_lights_popup_section")}>
-                <ha-icon slot="leading-icon" icon="mdi:open-in-new"></ha-icon>
-                <div class="panel-content">
-                  <ha-form
-                    .hass=${this.hass}
-                    .data=${{ mode: popupMode }}
-                    .schema=${[{ name: "mode", selector: this._popupModeSelector() }]}
-                    .computeLabel=${() => this._t("editor_lights_popup_mode")}
-                    @value-changed=${this._popupModeChanged}
-                  ></ha-form>
-
-                  ${popupMode === "default-detail"
-                    ? html`<div class="hint">${this._t("editor_lights_popup_mode_default_detail_hint")}</div>`
-                    : nothing}
-
-                  ${popupMode === "default-grid"
-                    ? html`
-                        <ha-form
-                          .hass=${this.hass}
-                          .data=${popupData}
-                          .schema=${this._popupSchema()}
-                          .computeLabel=${this._computeLabel}
-                          @value-changed=${this._popupChanged}
-                        ></ha-form>
-                      `
-                    : nothing}
-
-                  ${popupMode === "dimmer"
-                    ? html`
-                        <ha-form
-                          .hass=${this.hass}
-                          .data=${dimmerPopupData}
-                          .schema=${this._dimmerPopupSchema()}
-                          .computeLabel=${this._computeLabel}
-                          @value-changed=${this._dimmerPopupChanged}
-                        ></ha-form>
-                      `
-                    : nothing}
-
-                  ${popupMode === "custom"
-                    ? renderDetailCardField({
-                        hass: this.hass,
-                        value: popup.card,
-                        label: this._t("editor_lights_popup_card"),
-                        hint: this._t("editor_lights_popup_card_hint"),
-                        onChange: (v) => this._popupCardChanged(v),
-                      })
-                    : nothing}
-                </div>
-              </ha-expansion-panel>
-            `
-          : nothing}
-
         <ha-expansion-panel outlined .header=${this._t("editor_progress_colors")}>
           <ha-icon slot="leading-icon" icon="mdi:palette-outline"></ha-icon>
           <div class="panel-content">
-            ${colorRow(this._t("editor_lights_on_color"), cfg.on_color, (v) => this._colorChanged("on_color", v))}
+            <ha-form
+              .hass=${this.hass}
+              .data=${{ use_light_color: cfg.use_light_color ?? true }}
+              .schema=${[{ name: "use_light_color", selector: { boolean: {} } }]}
+              .computeLabel=${this._computeLabel}
+              @value-changed=${this._useLightColorChanged}
+            ></ha-form>
+            ${colorRow(this._t("editor_lights_accent_color"), cfg.accent_color, (v) => this._colorChanged("accent_color", v))}
             ${colorRow(this._t("editor_lights_off_color"), cfg.off_color, (v) => this._colorChanged("off_color", v))}
-            ${opacityRow(this._t("editor_lights_tile_tint_opacity"), cfg.tile_tint_opacity, 12, (v) =>
-              this._opacityChanged("tile_tint_opacity", v),
-            )}
-            ${colorRow(
-              this._t("editor_lights_accent_color"),
-              cfg.accent_color,
-              (v) => this._colorChanged("accent_color", v),
-              {
-                label: this._t("editor_lights_accent_opacity"),
-                value: cfg.accent_opacity,
-                defaultValue: 12,
-                onChange: (v) => this._opacityChanged("accent_opacity", v),
-              },
-            )}
+            ${colorRow(this._t("editor_light_track_color"), cfg.track_color, (v) => this._colorChanged("track_color", v))}
             ${colorRow(this._t("editor_progress_text_color"), cfg.text_color, (v) => this._colorChanged("text_color", v))}
             ${colorRow(
               this._t("editor_progress_secondary_text_color"),
               cfg.secondary_text_color,
               (v) => this._colorChanged("secondary_text_color", v),
             )}
-            ${colorRow(
-              this._t("editor_progress_card_background"),
-              cfg.card_background,
-              (v) => this._colorChanged("card_background", v),
-            )}
+            ${colorRow(this._t("editor_progress_card_background"), cfg.card_background, (v) => this._colorChanged("card_background", v))}
           </div>
         </ha-expansion-panel>
 
@@ -740,7 +573,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           hass: this.hass,
           language: this._language,
           config: cfg,
-          defaultRadius: DEFAULT_LIGHTS_OVERVIEW_RADIUS,
+          defaultRadius: DEFAULT_LIGHTS_DIMMER_RADIUS,
           state: this._appearance,
           computeLabel: this._computeLabel,
           onValueChanged: this._valueChanged.bind(this),
@@ -805,6 +638,6 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
 
 declare global {
   interface HTMLElementTagNameMap {
-    "m3-lights-overview-card-editor": M3LightsOverviewCardEditor;
+    "m3-lights-dimmer-overview-card-editor": M3LightsDimmerOverviewCardEditor;
   }
 }

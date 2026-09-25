@@ -2045,6 +2045,22 @@ export const LIGHTS_OVERVIEW_TILE_RADIUS = CLIMATE_OVERVIEW_TILE_RADIUS;
 export const LIGHTS_OVERVIEW_COLOR_ON = PALETTE.light;
 export const LIGHTS_OVERVIEW_COLOR_OFF = PALETTE.off;
 
+export const DEFAULT_LIGHTS_DIMMER_RADIUS = RADIUS.card;
+export const DEFAULT_LIGHTS_DIMMER_ICON = "mdi:lightbulb-group";
+export const LIGHTS_DIMMER_GAP = 8;
+export const LIGHTS_DIMMER_TILE_RADIUS = CLIMATE_OVERVIEW_TILE_RADIUS;
+export const LIGHTS_DIMMER_TILE_SIZE_HORIZONTAL = 64;
+export const LIGHTS_DIMMER_TILE_SIZE_VERTICAL = 180;
+// Below this column width a vertical layout switches to horizontal scrolling
+// instead of squeezing every column into an unreadable sliver.
+export const LIGHTS_DIMMER_VERTICAL_MIN_COL = 72;
+export const LIGHTS_DIMMER_WAVE_THICKNESS = 28;
+export const LIGHTS_DIMMER_WAVE_STROKE = 8;
+// Vertical tiles: the name sits below the slider, not overlaid on it (see
+// m3-lights-dimmer-overview-card's tile layout), so the column's own height
+// splits between the two — this is the name row's fixed share.
+export const LIGHTS_DIMMER_VERTICAL_NAME_HEIGHT = 24;
+
 export const DEFAULT_GROUP_RADIUS = RADIUS.card;
 export const DEFAULT_GROUP_GAP = 8;
 

@@ -41,6 +41,7 @@ export * from "./m3-humidifier-card";
 export * from "./m3-calendar-card";
 export * from "./m3-nav-card";
 export * from "./m3-lights-overview-card";
+export * from "./m3-lights-dimmer-overview-card";
 export * from "./m3-chip-buttons-card";
 export * from "./m3-group-card";
 export * from "./m3-appliance-card";
