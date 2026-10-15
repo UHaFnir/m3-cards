@@ -61,10 +61,11 @@ import {
 } from "./shared/level-slider";
 import { foldHides, readCollapsed, writeCollapsed, type CollapseTarget } from "./shared/collapse-state";
 import { foldArrowStyles, renderFoldArrow } from "./shared/fold-arrow";
-// The scroll-fade controller for these rows arrives with PR #15; until it
-// lands the row scrolls without the edge hint, which is what the standalone
-// chip-buttons card did before that PR too.
-import { chipButtonsStyles, renderChipButtons } from "./shared/chip-buttons";
+import {
+  ChipRowFadeController,
+  chipButtonsStyles,
+  renderChipButtons,
+} from "./shared/chip-buttons";
 import { DetailCardController } from "./shared/detail-card";
 import {
   popupCardStyles,
@@ -149,6 +150,8 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
     },
   });
   private _chipGestures = new TapHoldGesture();
+  /** The edge hints on the free-button row, shared with the chip-buttons card. */
+  private _fades = new ChipRowFadeController();
   private _selectTimers: Record<string, number> = {};
   /** The speed to return to when "mop only" is switched back off. */
   private _lastRealSpeed?: string;
@@ -194,6 +197,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._fades.disconnect();
     this._optimistic.clear();
     this._popupCard.reset();
     if (this._fanSettle) clearTimeout(this._fanSettle);
@@ -261,6 +265,7 @@ export class M3VacuumCard extends TemplatedCard(LitElement) implements LovelaceC
   };
 
   protected updated(): void {
+    this._fades.sync(this.renderRoot);
     this._maybeSyncPopupCard();
     if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
     // Two dialogs live in this shadow root — the configured popup and the
