@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  boundMode,
   nudgeRange,
   readClimateTarget,
   setTargetRange,
@@ -103,5 +104,13 @@ describe("setTargetRange", () => {
       target_temp_low: 19,
       target_temp_high: 24,
     });
+  });
+});
+
+describe("boundMode", () => {
+  it("paints the low bound in heat and the high one in cool", () => {
+    // The low bound is the heating setpoint, however much "low" suggests cold.
+    expect(boundMode("low")).toBe("heat");
+    expect(boundMode("high")).toBe("cool");
   });
 });

@@ -70,12 +70,17 @@ what it gets, which also keeps it right for the vendors that leave a band
 attribute lying around in a single-setpoint mode.
 
 When there is a band, both numbers are printed side by side where the single
-target normally sits: heat-to on the left, cool-above on the right. Tapping one
-lights it and aims the minus/plus buttons at it; the other stays at full
-strength, only uncoloured. One pair of buttons is all a tile this size has room
-for — a second pair would halve both numbers, and this card exists to stay
-readable two-up on a phone. There is nothing to configure: the band appears
-because the thermostat reports one.
+target normally sits: heat-to on the left in the heat colour, cool-above on the
+right in the cool one. There is no room for a label at this size, so the colour
+is what says which end each number is — and it comes from the same
+`mode_colors` as the mode row, so an override there reaches the band too.
+Tapping one lights it and aims the minus/plus buttons at it: the lit bound sits
+in a filled well of its own colour, the other stays coloured text at the same
+size. The fill says which number the buttons move, the colour says which end it
+is. One pair of buttons is all a tile this size has room for — a second pair
+would halve both numbers, and this card exists to stay readable two-up on a
+phone. There is nothing to configure: the band appears because the thermostat
+reports one.
 
 The two bounds can neither meet nor cross. Each stops one step short of the
 other, since a thermostat told to heat to 21 and cool above 21 is being asked

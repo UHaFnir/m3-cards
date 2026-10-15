@@ -52,6 +52,13 @@ band gets two of the same row stacked at the bottom of the card, labelled
 to be configured — an entity that switches between `heat` and `heat_cool`
 switches control with it.
 
+Each row's reading is printed in the colour of the end it is: "Heat to" in the
+heat colour, "Cool above" in the cool one. They are the same two colours the
+mode row uses, so overriding `heat` or `cool` in `mode_colors` retunes the band
+as well — there is no second pair of options for it. The low bound being the
+warm one reads backwards as a scale and correctly as a control: it is the
+number the heating obeys.
+
 Two rows rather than one slider with two handles: the card's target has
 always been a large reading with a minus and a plus either side of it, and a
 drag track would be a second idiom for the same job. On a six-column tile two

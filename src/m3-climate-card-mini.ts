@@ -24,10 +24,11 @@ import { renderMissingEntity } from "./shared/glass-card";
 import { shouldAnimate } from "./shared/animation";
 import { migrateAnimationsField } from "./shared/config-migration";
 import { activateOnKey } from "./shared/a11y";
-import { tintOn, tintInk, foregroundOn } from "./shared/color-config";
+import { tintOn, tintInk, foregroundOn, foregroundColor } from "./shared/color-config";
 import { TemplatedCard } from "./shared/templated-card";
 import {
   readClimateTarget,
+  boundMode,
   nudgeRange,
   setTargetRange,
   setTargetTemperature,
@@ -196,6 +197,25 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
   }
 
   /**
+   * The ink and the well for one bound of a band.
+   *
+   * Both numbers carry their own colour at all times — that is what says which
+   * end of the band each one is, and the pair is unreadable without it. The
+   * selection is the fill: the lit bound sits in a well of its colour and is
+   * measured against that well, the unlit one is coloured text measured
+   * against the card. Neither changes size, so the eye is not pulled by the
+   * selection alone.
+   */
+  private _boundPaint(bound: TargetBound): { ink: string; bg: string; on: string } {
+    const color = this._modeColor(boundMode(bound));
+    return {
+      ink: foregroundColor(this, color),
+      bg: tintOn(this, color, undefined, 22),
+      on: tintInk(this, color, undefined, 22),
+    };
+  }
+
+  /**
    * The bottom row: minus, the target, plus.
    *
    * A single setpoint gets the row this card has always had. A band gets both
@@ -218,9 +238,11 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
       const locked = dimUnavailable || !complete;
       const renderBound = (which: TargetBound, value: number | undefined) => {
         const selected = this._bound === which;
+        const paint = this._boundPaint(which);
         return html`
           <button
             class="bound ${selected ? "selected" : ""}"
+            style=${`--m3-bound-ink: ${paint.ink}; --m3-bound-bg: ${paint.bg}; --m3-bound-color: ${paint.on};`}
             ?disabled=${dimUnavailable}
             aria-pressed=${selected}
             aria-label=${this._t(
@@ -369,10 +391,6 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
     );
     const minusBg = tintOn(this, minusColor, this._config.minus_opacity, 8);
     const plusBg = tintOn(this, plusColor, this._config.plus_opacity, 20);
-    // The lit bound of a band is a well of its own, so its number is measured
-    // against that well and not against the card.
-    const boundBg = tintOn(this, modeColor, undefined, 22);
-    const boundInk = tintInk(this, modeColor, undefined, 22);
 
     const hvacModesRaw: string[] = Array.isArray(attrs.hvac_modes)
       ? attrs.hvac_modes
@@ -410,7 +428,7 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
 
     return html`
       <ha-card
-        style=${`--m3-mode-color: ${modeColor}; --m3-icon-active-color: ${foregroundOn(iconActiveColor, iconActiveBg)}; --m3-icon-inactive-color: ${foregroundOn(iconInactiveColor, iconInactiveBg)}; --m3-power-active-color: ${foregroundOn(powerActiveColor, powerActiveBg)}; --m3-power-inactive-color: ${foregroundOn(powerInactiveColor, powerInactiveBg)}; --m3-plus-color: ${plusColor}; --m3-minus-color: ${minusColor}; --m3-icon-inactive-bg: ${iconInactiveBg}; --m3-icon-active-bg: ${iconActiveBg}; --m3-power-inactive-bg: ${powerInactiveBg}; --m3-power-active-bg: ${powerActiveBg}; --m3-minus-bg: ${minusBg}; --m3-plus-bg: ${plusBg}; --m3-bound-bg: ${boundBg}; --m3-bound-color: ${boundInk}; border-radius: ${radius};`}
+        style=${`--m3-mode-color: ${modeColor}; --m3-icon-active-color: ${foregroundOn(iconActiveColor, iconActiveBg)}; --m3-icon-inactive-color: ${foregroundOn(iconInactiveColor, iconInactiveBg)}; --m3-power-active-color: ${foregroundOn(powerActiveColor, powerActiveBg)}; --m3-power-inactive-color: ${foregroundOn(powerInactiveColor, powerInactiveBg)}; --m3-plus-color: ${plusColor}; --m3-minus-color: ${minusColor}; --m3-icon-inactive-bg: ${iconInactiveBg}; --m3-icon-active-bg: ${iconActiveBg}; --m3-power-inactive-bg: ${powerInactiveBg}; --m3-power-active-bg: ${powerActiveBg}; --m3-minus-bg: ${minusBg}; --m3-plus-bg: ${plusBg}; border-radius: ${radius};`}
         class=${dimUnavailable ? "unavailable" : ""}
       >
         <div
@@ -680,8 +698,8 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
     /* A band has two numbers where a single setpoint has one, and this row is
        40px tall on a tile meant to sit two-up on a phone — there is no room
        for a second pair of buttons. So the buttons shrink to the width of
-       their glyph, both bounds are printed at full strength, and the lit one
-       is the one the buttons move. */
+       their glyph, both bounds are printed at full strength in the colour of
+       the end they are, and the lit one is the one the buttons move. */
     .stepper-row.range .stepper-btn {
       flex: 0 0 40px;
     }
@@ -699,7 +717,7 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
       font-family: inherit;
       font-size: 15px;
       font-weight: 700;
-      color: var(--primary-text-color);
+      color: var(--m3-bound-ink, var(--primary-text-color));
       cursor: pointer;
       overflow: hidden;
       text-overflow: ellipsis;

@@ -22,6 +22,21 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   domain, and a helper that happens to feed a meter still gets offset mode
   while the meter itself gets calibrated.
 
+### Changed
+
+- **The two setpoints of a heat/cool band are coloured.** Both cards drew the
+  band's numbers in plain text. On the full card that leaves an 11-pixel label
+  as the only thing saying which number is which; on the mini card, where the
+  two sit side by side with no room for a label at all, it leaves their order.
+  Each bound now carries the colour of the end it is: "Heat to" in the heat
+  colour, "Cool above" in the cool one, taken from the same `mode_colors` as
+  the mode row, so an override there retunes the band too. Nothing new to
+  configure. Suggested by `enotbay` in #21.
+
+  The low bound is the warm one. It reads backwards as a scale and correctly as
+  a control: `target_temp_low` is the number the heating obeys, which is also
+  the way round Home Assistant's own thermostat has it.
+
 ### Fixed
 
 - **`adjustable: true` could silently do nothing.** On a plain `sensor` with no

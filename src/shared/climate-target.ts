@@ -65,6 +65,25 @@ export function supportsRange(attrs: TargetAttributes | undefined): boolean {
 }
 
 /**
+ * The hvac mode whose colour belongs to a bound of a band.
+ *
+ * `target_temp_low` is the temperature the *heating* works up to and
+ * `target_temp_high` the one the *cooling* works down from — the card already
+ * says so in words ("Heat to" / "Cool above"), so the warm colour belongs to
+ * the low number and the cold one to the high. Read as a scale it looks
+ * inverted; read as "this is the number the heater obeys" it is the only way
+ * round that can be acted on, and it is the way round Home Assistant's own
+ * thermostat control has it.
+ *
+ * Returning a mode rather than a colour means the two numbers are painted in
+ * the same heat and cool the mode row is already painted in, including a
+ * `mode_colors` override — one place to retune, no second pair of options.
+ */
+export function boundMode(bound: TargetBound): "heat" | "cool" {
+  return bound === "low" ? "heat" : "cool";
+}
+
+/**
  * Moves one bound of a band by `delta`, keeping the band a band.
  *
  * The bounds may not cross, and they may not meet: a thermostat asked to heat

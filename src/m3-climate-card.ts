@@ -27,7 +27,7 @@ import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { hassChangeMatters } from "./shared/should-update";
 import { formatNumber } from "./shared/formatting";
 import { renderMissingEntity } from "./shared/glass-card";
-import { tintOn } from "./shared/color-config";
+import { tintOn, foregroundColor } from "./shared/color-config";
 import { shouldAnimate } from "./shared/animation";
 import { migrateAnimationsField } from "./shared/config-migration";
 import { activateOnKey } from "./shared/a11y";
@@ -35,6 +35,7 @@ import { TemplatedCard } from "./shared/templated-card";
 import {
   nudgeRange,
   readClimateTarget,
+  boundMode,
   setTargetRange,
   setTargetTemperature,
   type TargetBound,
@@ -227,6 +228,11 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
    * band inherits the card's control vocabulary instead of introducing a
    * second one. `stepLabels` is only set for a band, where two identical
    * "+" buttons would otherwise be indistinguishable to a screen reader.
+   *
+   * `accent` is likewise only set for a band: it colours the reading so the
+   * two rows are told apart at a glance rather than by reading their labels.
+   * A row with nothing to show keeps the plain dash — a coloured "–" would
+   * claim a setpoint that is not there.
    */
   private _renderStepper(opts: {
     value?: number;
@@ -234,12 +240,14 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     unit: string;
     blank: boolean;
     disabled: boolean;
+    accent?: string;
     stepLabels?: { minus: string; plus: string };
     onStep: (direction: 1 | -1) => void;
   }) {
-    const { value, label, unit, blank, disabled, stepLabels, onStep } = opts;
-    const reading =
-      blank || value === undefined ? "–" : `${this._formatNumber(value)} ${unit}`;
+    const { value, label, unit, blank, disabled, accent, stepLabels, onStep } = opts;
+    const missing = blank || value === undefined;
+    const reading = missing ? "–" : `${this._formatNumber(value)} ${unit}`;
+    const valueStyle = accent && !missing ? `color: ${accent};` : nothing;
     return html`
       <div class="stepper-row">
         <button
@@ -258,7 +266,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           @click=${() => this._fireMoreInfo(this._config?.entity)}
           @keydown=${activateOnKey(() => this._fireMoreInfo(this._config?.entity))}
         >
-          <div class="value">${reading}</div>
+          <div class="value" style=${valueStyle}>${reading}</div>
           <div class="label">${label}</div>
         </div>
         <button
@@ -574,6 +582,10 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
    *
    * Either bound missing disables both rows: `nudgeRange` needs the pair to
    * keep them apart, and a half-known band is one the card must not move.
+   *
+   * Each row's reading is painted in its own end's colour — the heat and the
+   * cool of the mode row above it, so a `mode_colors` override reaches here
+   * too. See `boundMode` for which way round and why.
    */
   private _renderBand(
     target: { low?: number; high?: number },
@@ -586,6 +598,8 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     const disabled = dimUnavailable || incomplete;
     const lowLabel = this._t("target_temp_low");
     const highLabel = this._t("target_temp_high");
+    const boundAccent = (bound: TargetBound) =>
+      foregroundColor(this, this._modeColor(boundMode(bound)));
     return html`
       <div
         class="stepper-band"
@@ -598,6 +612,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           unit,
           blank: unavailable,
           disabled,
+          accent: boundAccent("low"),
           stepLabels: { minus: `${lowLabel} −`, plus: `${lowLabel} +` },
           onStep: (direction) =>
             this._handleBandStep("low", target, direction, limits, dimUnavailable),
@@ -608,6 +623,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           unit,
           blank: unavailable,
           disabled,
+          accent: boundAccent("high"),
           stepLabels: { minus: `${highLabel} −`, plus: `${highLabel} +` },
           onStep: (direction) =>
             this._handleBandStep("high", target, direction, limits, dimUnavailable),
