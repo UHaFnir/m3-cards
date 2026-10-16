@@ -4,9 +4,23 @@ Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
-## [Unreleased]
+## [2.4.1] – 2026-10-16
 
 ### Added
+
+- **M3 Button Card can now embed its own row of chip buttons** via the new
+  `chip_buttons` option, reusing the same editor and rendering as the
+  standalone Chip Buttons Card. Layout adapts to the card's height: at a
+  normal single-row height the chips sit right-aligned next to the
+  icon/text, and once the card is resized taller they move to a
+  bottom-anchored bar whose alignment (`chip_buttons_justify`: left/center/
+  right) becomes configurable — the switch is handled purely with a CSS
+  container query, so it needs no JS height measuring and adapts instantly
+  as the card is resized in the dashboard editor. `chip_buttons_layout`
+  decides what happens when there are more chips than fit: `wrap` (the
+  default) breaks the row onto a second line, `scroll` keeps it on one line
+  and scrolls it horizontally with the same edge fade the Chip Buttons Card
+  uses.
 
 - **The counter card can correct a `utility_meter`.** Its pencil could write an
   `input_number` or shift an offset helper, which covered the two cases the
@@ -23,6 +37,15 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   while the meter itself gets calibrated.
 
 ### Changed
+
+- **A scrolling chip row fades at the edge that has something behind it.**
+  The fades lived on the chip-buttons card as an inline observer, so the row
+  the button card now embeds would have had to copy them and the vacuum card's
+  row had none at all. They moved into `shared/chip-buttons.ts`, which is why
+  all three behave the same: a mask appears only on a side with content
+  scrolled out of view, and a row that fits has none. The decision itself is a
+  pure function over the scroll position, so it is tested without a layout
+  engine.
 
 - **The two setpoints of a heat/cool band are coloured.** Both cards drew the
   band's numbers in plain text. On the full card that leaves an 11-pixel label
@@ -45,6 +68,14 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   why. The pencil is now drawn greyed with the reason on it. `adjustable` and
   `adjust_entity` were also undocumented; the counter card's page now has a
   section on all three ways a reading can be corrected.
+
+- **The counter card pointed at a service that does not exist.** Its repair
+  instructions named `recorder.adjust_sum_statistics`, which is a websocket
+  command rather than a service: `hass.services.recorder` carries only purge,
+  purge_entities, enable, disable and get_statistics, and calling it answers
+  "not found". The confirmation and the documentation now point at Developer
+  tools → Statistics → "Adjust sum", where the same operation actually lives.
+  Both halves were measured on a throwaway meter rather than assumed.
 
 ## [2.4.0] – 2026-09-20
 
@@ -381,19 +412,6 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   ```yaml
   type: custom:m3-search-card
   ```
-- **M3 Button Card can now embed its own row of chip buttons** via the new
-  `chip_buttons` option, reusing the same editor and rendering as the
-  standalone Chip Buttons Card. Layout adapts to the card's height: at a
-  normal single-row height the chips sit right-aligned next to the
-  icon/text, and once the card is resized taller they move to a
-  bottom-anchored bar whose alignment (`chip_buttons_justify`: left/center/
-  right) becomes configurable — the switch is handled purely with a CSS
-  container query, so it needs no JS height measuring and adapts instantly
-  as the card is resized in the dashboard editor. `chip_buttons_layout`
-  decides what happens when there are more chips than fit: `wrap` (the
-  default) breaks the row onto a second line, `scroll` keeps it on one line
-  and scrolls it horizontally with the same edge fade the Chip Buttons Card
-  uses.
 
 - **The appliance card gets its own popup**, via `popup`. The card is a summary
   — a state, a progress bar, a few buttons. The full set of controls (every
