@@ -54,7 +54,7 @@ Beide Fehler ließen die Seite besser aussehen, als sie war.
 - Ein Handy oder ein per DevTools emuliertes Touch-Gerät für alle Drag-Interaktionen
   (Wave-Slider, Wischen) — Maus-Events allein decken `touch-action`-Konflikte nicht ab.
 
-## Cross-Cutting-Checkliste (für jede der 41 Karten)
+## Cross-Cutting-Checkliste (für jede der 44 Karten)
 
 Diese Punkte gelten kartenübergreifend, weil sie über gemeinsame `shared/*`-Module
 implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichzeitig.
@@ -94,6 +94,9 @@ implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichze
 | `hidden_modes` | Einen Modus in `hidden_modes` eintragen, der aber in `hvac_modes` der Entität steckt | Pill für diesen Modus wird nicht gerendert |
 | `unavailable_style: "hidden"` | Entität auf `unavailable`, Style auf `hidden` | Karte verschwindet komplett (kein leeres Gerüst) |
 | Mode-Farben-Override | `mode_colors.heat` auf eigene Farbe setzen | Pill/Header-Akzent für „heat“ übernimmt die Farbe |
+| Band-Sollwerte eingefärbt | Thermostat im Modus `heat_cool` (zwei Sollwerte) | „Heizen bis“ steht in der Heizfarbe, „Kühlen ab“ in der Kühlfarbe. Beide Zahlen auf hellem **und** dunklem Theme lesbar — die Farben werden gegen die echte Fläche korrigiert, sind also nicht in beiden Themes derselbe Hex |
+| Band-Farben folgen `mode_colors` | `mode_colors.heat` und `mode_colors.cool` auf eigene Farben setzen, Modus `heat_cool` | Die beiden Sollwert-Zahlen übernehmen den Override, nicht die Palette. Es gibt keine zweite Option dafür |
+| Band ohne Wert | Sollwert fehlt oder Entität ist `unavailable` | Statt einer gefärbten Zahl steht „–“ in der normalen Textfarbe, nicht in Heiz- oder Kühlfarbe |
 
 ## M3 Climate Card Mini
 
@@ -103,6 +106,8 @@ implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichze
 | Icon/Text-Klick | Auf Icon-Swatch bzw. Namens-Block tippen | Öffnet More-Info (nicht den Power-Toggle) |
 | Stepper | Plus/Minus/Wert-Anzeige antippen | Wie bei der großen Karte; Wert-Anzeige öffnet More-Info |
 | Kompaktes Layout | Karte auf sehr schmaler Spaltenbreite (Handy) platzieren | Kein Text-Overflow, Buttons bleiben antippbar (min. 40×40px) |
+| Band-Sollwerte eingefärbt | `heat_cool`-Thermostat, Kachel auf schmaler Spalte | Linke Zahl warm, rechte Zahl kalt. Auf der Kachel ist für eine Beschriftung kein Platz — die Farbe ist das Einzige, was die beiden auseinanderhält, also gegenprüfen, dass sie nicht vertauscht sind |
+| Band-Stepper trifft den richtigen Rand | In der Kachel + und − jeweils links und rechts antippen | Die linke Hälfte verstellt `target_temp_low`, die rechte `target_temp_high`; die Farbe der Zahl wandert nicht mit |
 
 ## M3 Button Card
 
@@ -166,6 +171,9 @@ implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichze
 | Leistungs-Chip + Schwellwerte | `power_entity` + `power_thresholds` mit mehreren Stufen | Chip-Farbe wechselt an den konfigurierten Schwellen |
 | Ticker | `daily_entity` + `show_ticker: true` | „+X heute“-Zeile erscheint, Format nutzt korrekte Einheit |
 | Reduced-Motion | Aktivieren, Wert ändern | Ziffern springen direkt zum neuen Wert, keine Roll-Animation |
+| `utility_meter` korrigieren | `adjustable: true`, `entity` ist ein `utility_meter`. Stift antippen, neuen Stand eingeben, bestätigen | Erst eine Rückfrage — der Stand trägt Historie und ist aus der Karte nicht zurückzuholen. Nach dem Bestätigen `utility_meter.calibrate`, der neue Wert steht sofort. **An einem Wegwerf-Zähler üben, nicht am Strom- oder Wasserzähler** |
+| Zähler nie über die Quelle | `adjust_entity` auf einen Helfer zeigen lassen, der selbst einen `utility_meter` speist | Der Helfer bekommt den Offset, der Zähler wird **nicht** über seine Quelle verschoben. Die Gegenprobe ist der Zählerstand nach dem nächsten Anstieg: er darf nicht um den ganzen neuen Wert springen |
+| Stift ohne Ziel | `adjustable: true` auf einem reinen `sensor` ohne `adjust_entity` | Stift wird grau gezeichnet, mit dem Grund daran — nicht weggelassen. Früher verschwand er wortlos, was wie ein defektes `adjustable` aussah |
 
 ## M3 Power List Card
 
@@ -680,7 +688,9 @@ einer entscheidet, was ein Raum **zeigt**, der andere, was ein Tippen
 
 | Test | Schritte | Erwartung |
 |---|---|---|
-| Umbruch statt Scrollen | Mehr Pillen als in eine Zeile passen, Karte schmal machen | Die Reihe bricht um; sie scrollt **nicht** waagerecht |
+| Scrollen ist der Standard | Mehr Pillen als in eine Zeile passen, Karte schmal machen, `wrap` nicht setzen | Die Reihe bleibt einzeilig und scrollt waagerecht. (Die drei Stellen haben absichtlich verschiedene Vorgaben: diese Karte scrollt, eine eingebettete Reihe bricht um) |
+| Umbruch | Dieselbe Config mit `wrap: true` | Die Reihe bricht auf eine zweite Zeile um und scrollt nicht; keine Kante an den Rändern |
+| Weiche Kanten beim Scrollen | Überlaufende Reihe ganz nach links, in die Mitte und ganz nach rechts scrollen | Die Kante liegt nur auf der Seite, hinter der wirklich etwas liegt: links nur rechts, in der Mitte beidseitig, rechts nur links. Passt alles in die Breite, gibt es gar keine Kante |
 | Zustandsfarbe | `use_entity_color: true` an einer farbigen Lampe | Pille nimmt die Farbe der Entität, nicht die aus `color` |
 | Feste Farbe | `static_color: true` | Pille bleibt „aktiv" eingefärbt, auch wenn die Entität aus ist |
 | Nur Anzeige | `interactive: false` | Kein Tipp-Feedback, kein Zeiger, keine Button-Rolle für Screenreader |
@@ -790,6 +800,18 @@ Fallen woanders als bei den übrigen Karten.
 | Reduced Motion | C11/C12 mit `style: sheet` | Schublade springt zwischen den Rastpunkten, ohne Nachfedern |
 | Ganze Karte ausblenden | `hidden` auf ein Template setzen, das wahr wird | Leiste verschwindet vollständig |
 
+## M3 Vacuum Card
+
+Nur die Chip-Reihe. Der Rest der Karte — Zustandslayouts, Räume, Fehlerfall —
+hat noch keine Zeilen hier; das gilt genauso für die Printer- und die
+Appliance-Karte, alle drei kamen mit 2.4.0 und sind an der Matrix vorbeigegangen.
+
+| Test | Schritte | Erwartung |
+|---|---|---|
+| Chip-Reihe scrollt mit Kanten | `buttons:` mit mehr Einträgen als in die Breite passen, dazu `buttons_wrap: false`. Reihe ganz nach links, in die Mitte und ganz nach rechts scrollen | Die Kante liegt nur auf der Seite, hinter der etwas verborgen ist: links nur rechts, mittig beidseitig, rechts nur links. Keine Kante am ersten Chip, solange nichts links von ihm liegt |
+| Umbruch ist hier der Standard | Dieselben `buttons:`, `buttons_wrap` weglassen | Die Reihe bricht um statt zu scrollen, und hat keine Kante. Wer die Kanten will, muss `buttons_wrap: false` setzen — das ist der Grund, warum sie an einer Standard-Config nie zu sehen sind |
+| Ohne `buttons:` | Karte ohne konfigurierte Buttons | Es wird gar keine Reihe gezeichnet (nicht etwa eine leere) |
+
 ## Bekannte Einschränkungen
 
 Beide Punkte, die hier bis 2.0 standen — die Akzentfarben im hellen Theme und
@@ -809,7 +831,7 @@ kleiner konfigurierte Kachel angehoben und nicht abgeschnitten wird.
 1. Alle Cross-Cutting-Punkte (C1–C15) auf mindestens 3 unterschiedlichen Karten
    durchgehen (eine einfache, eine mit Editor-Unterinhalten wie Battery/Power-List,
    eine mit Animation wie Progress/Light).
-2. Jede der 41 Karten mindestens einmal mit einer Minimal-Config und einmal mit
+2. Jede der 44 Karten mindestens einmal mit einer Minimal-Config und einmal mit
    einer voll ausgereizten Config (alle Farben/Optionen gesetzt) rendern.
 3. `CHANGELOG.md` gegen die tatsächlich getesteten Änderungen abgleichen.
 4. Die Kartenzahl abgleichen. Zwei der vier Stellen zählen sich seit der
