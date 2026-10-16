@@ -802,15 +802,230 @@ Fallen woanders als bei den übrigen Karten.
 
 ## M3 Vacuum Card
 
-Nur die Chip-Reihe. Der Rest der Karte — Zustandslayouts, Räume, Fehlerfall —
-hat noch keine Zeilen hier; das gilt genauso für die Printer- und die
-Appliance-Karte, alle drei kamen mit 2.4.0 und sind an der Matrix vorbeigegangen.
+Der Prüfgegenstand ist, was die Karte **nicht** zeichnet: fast alles ist von
+der Entdeckung auf dem Gerät abhängig und fällt still weg. Ein fehlender Block
+sieht aus wie ein Feature, das es nicht gibt.
 
-| Test | Schritte | Erwartung |
-|---|---|---|
-| Chip-Reihe scrollt mit Kanten | `buttons:` mit mehr Einträgen als in die Breite passen, dazu `buttons_wrap: false`. Reihe ganz nach links, in die Mitte und ganz nach rechts scrollen | Die Kante liegt nur auf der Seite, hinter der etwas verborgen ist: links nur rechts, mittig beidseitig, rechts nur links. Keine Kante am ersten Chip, solange nichts links von ihm liegt |
-| Umbruch ist hier der Standard | Dieselben `buttons:`, `buttons_wrap` weglassen | Die Reihe bricht um statt zu scrollen, und hat keine Kante. Wer die Kanten will, muss `buttons_wrap: false` setzen — das ist der Grund, warum sie an einer Standard-Config nie zu sehen sind |
-| Ohne `buttons:` | Karte ohne konfigurierte Buttons | Es wird gar keine Reihe gezeichnet (nicht etwa eine leere) |
+- [ ] Zustandsfarben durchspielen: Reinigen blau, Station grün, Pause amber,
+      Rückkehr violett, Fehler rot
+- [ ] **Unerreichbar ist grau, nicht rot.** Roborock trennt kurz und oft; Rot
+      ist dem echten Fehler vorbehalten, sonst verliert es seine Bedeutung
+- [ ] Icon bleibt in jedem Zustand `robot-vacuum` — die Farbe trägt den
+      Zustand. Nur Fehler → `robot-vacuum-alert`, unerreichbar →
+      `robot-vacuum-off`
+- [ ] Primärbutton folgt dem Zustand: Start / Pause / Fortsetzen
+- [ ] **Optimistischer Tap:** Start drücken und mitzählen. Die Karte malt den
+      angefragten Zustand sofort und dimmt den Button, solange er unbestätigt
+      ist; Roborock pollt alle 30 s, bestätigt also erst danach
+- [ ] Gegenprobe dazu: Dock blockieren oder Befehl ins Leere laufen lassen —
+      die Vermutung verfällt nach `optimistic_timeout` (70 s) von selbst, die
+      Karte bleibt nicht auf dem falschen Zustand stehen
+- [ ] Saugstufen kommen aus `fan_speed_list` und zeigen vier steigende Balken,
+      keinen Text. Bei weniger als zwei Stufen fehlt die Reihe ganz
+- [ ] Räume: ohne `rooms` kein Block. Mit Räumen wird der Primärbutton zu
+      „N Räume reinigen“
+- [ ] **Reihenfolge der Tipps wird weitergereicht, nicht sortiert** — drei
+      Räume in ungewöhnlicher Reihenfolge antippen und im Dienst-Aufruf
+      (Entwicklerwerkzeuge → Protokoll) gegenprüfen
+- [ ] Räume, die nichts tun: fehlt `CLEAN_AREA` in den Supported Features oder
+      die Segment-Zuordnung auf der Entität, wird der Dienst gerufen und der
+      Roboter ignoriert ihn. Das ist kein Kartenfehler — vor dem Melden beides
+      prüfen
+- [ ] `map_fit: plan` (Standard) gegen `picture`: `plan` schneidet den leeren
+      Rand weg, der Grundriss füllt die Box. `picture` zeigt die Datei wie sie
+      kommt
+- [ ] Karte im Firefox öffnen: ohne `object-view-box` erscheint das ganze Bild,
+      ohne Fehler und ohne kaputtes Layout
+- [ ] **Die Karte selbst nimmt keine Pinch-Geste** — am Handy über die Karte
+      nach unten wischen, das Dashboard muss scrollen und das Bild still
+      stehen. Die Lupe unten in der Ecke ist der Weg zum Zoom
+- [ ] Im Vollbild: Pinch, Ziehen, Mausrad, Doppeltipp schaltet 1×↔2×
+- [ ] Im Vollbild seitlich ziehen: `hass-swipe-navigation` darf **nicht** die
+      Ansicht wechseln
+- [ ] `map_tap_action: { action: none }` macht das Bild unempfindlich, die Lupe
+      bleibt
+- [ ] Reinigungsmodus ist ein **Menü**, kein Schieberegler, und sitzt unten.
+      Eine Auswahl setzt den `select` und **startet nichts**
+- [ ] `collapsible: true` faltet; `collapse_blocks: [map, mop, buttons]` faltet
+      nur diese drei und lässt Saugstufe und Chips stehen
+- [ ] Faltzustand überlebt einen Reload (`collapse_memory: device`), bzw. nur
+      die Sitzung bei `session`, bzw. liegt im `input_boolean` bei
+      `collapse_state_entity` — dann faltet auch eine Automation
+- [ ] `popup` konfiguriert: Tipp auf den Header öffnet das Popup statt
+      More-Info. Ein ausdrückliches `tap_action` gewinnt über beides
+- [ ] `states`-Regel mit eigenem `label`: gewinnt über den Text des
+      Status-Sensors (Override, nicht nur Rückfall)
+- [ ] Chips haben einen Rand und keine Füllung — sie sind Anzeige. Ein fälliger
+      Reminder-Chip ist gefüllt, weil man ihn abhaken kann
+- [ ] `max_chips: 4` mit mehr Chips: der Rest klappt zu „+n“, **ein Fehler-Chip
+      niemals**
+- [ ] Fehler-Benachrichtigung: sie hängt an den beiden Fehler-Sensoren, nicht
+      am `error`-Zustand des Saugers. Also auch einen **Dock**-Fehler auslösen
+      (Wassertank leer) — der erreicht die Vacuum-Entität gar nicht
+- [ ] Sie feuert einmal und bleibt still, solange derselbe Fehler steht; ein
+      HA-Neustart spielt keine alten Fehler nach
+- [ ] Chip-Reihe mit Kanten: `buttons:` mit mehr Einträgen als in die Breite
+      passen, dazu `buttons_wrap: false`. Ganz nach links, in die Mitte und
+      ganz nach rechts scrollen — die Kante liegt nur auf der Seite, hinter der
+      wirklich etwas liegt
+- [ ] Dieselben `buttons:` ohne `buttons_wrap`: die Reihe bricht um und hat
+      keine Kante. Das ist hier der Standard, und der Grund, warum die Kanten
+      an einer gewöhnlichen Config nie zu sehen sind
+- [ ] Ganz ohne `buttons:` wird keine Reihe gezeichnet, auch keine leere
+
+## M3 Vacuum Maintenance Card
+
+Die Karte rechnet mit Zahlen, die die Sensoren nicht liefern — Lebensdauern,
+Bezugspunkte für Reminder. Dort sitzen die Fehler, nicht im Layout.
+
+- [ ] Dock-Verschleißteile (Sieb, Reinigungsbürste) stehen neben den eigenen
+      Bürsten. Roborock meldet das Dock als **zweites Gerät**, das weder über
+      `via_device` noch `parent_device` verknüpft ist — fehlen die beiden
+      Zeilen, greift die Suche über den Identifier nicht mehr
+- [ ] Ein Teil ohne hinterlegte Lebensdauer zeigt seine **Stunden ohne Balken**
+      — kein Balken gegen einen erfundenen Nenner
+- [ ] `max_hours` an einem Verschleißteil setzen: der Balken rechnet dagegen
+- [ ] Ein überfälliges Teil meldet negative Stunden. Es muss „überfällig“
+      lesen, nicht „−12 h“
+- [ ] `warn_below: 25` → amber, `alert_below: 10` → rot
+- [ ] **`show_reset: true`, der wichtigste Punkt hier.** Home Assistant liefert
+      Roborocks Reset-Buttons **deaktiviert** aus, und eine deaktivierte
+      Entität steht nicht in der Registry — die Karte kann „abgeschaltet“ nicht
+      von „gibt es nicht“ unterscheiden. Erwartung im Auslieferungszustand:
+      graues Icon mit dem Grund daran, nicht weggelassen
+- [ ] Danach unter *Einstellungen → Geräte → Entitäten* einen Reset-Button
+      aktivieren: das Icon wird scharf, ein Druck fragt zuerst und drückt dann
+      den HA-Button. **Nur an einem Teil prüfen, der tatsächlich neu ist** — es
+      gibt kein Zurück, der Zähler sagt danach „neu“
+- [ ] Reminder ohne `counter_entity`: feuert auf jedem Vielfachen (Lauf 3, 6,
+      9) und lässt sich nicht abhaken
+- [ ] Reminder mit `counter_entity`: liest sich als „vor 2 Läufen“, die Zeile
+      ist abhakbar, und der Zustand überlebt einen Browserwechsel
+- [ ] **„Zähler-Helfer anlegen“ im Editor** setzt den Helfer auf den heutigen
+      Zählerstand, nicht auf 0. Gegenprobe am Wert: ein Sauger mit 400 Läufen
+      und einem Helfer auf 0 meldet den Mopp 397 Läufe überfällig
+- [ ] Abhaken vor der Fälligkeit: das stille Reset-Icon neben der Zahl setzt
+      den Zähler ebenfalls zurück
+- [ ] `every_runs` und `every_hours` zusammen: die Stunden gewinnen
+- [ ] Derselbe `reminders`-Block auf der Steuerkarte: ein fälliger Reminder
+      erscheint dort als Chip und lässt sich antippen
+- [ ] `collapsible`: der **Header faltet nie** — die Zeile „3 Teile bald fällig“
+      ist der Grund, auf die Karte zu sehen
+- [ ] Tagesdigest-Automation: nichts fällig → **nichts gesendet**. Ohne diese
+      Bedingung käme jeden Morgen eine leere Liste, und der Kanal wird
+      stummgeschaltet
+- [ ] Den Schalter wieder ausschalten: die Automation wird pausiert, nicht
+      gelöscht — Ziel und Wortlaut stehen danach noch
+
+## M3 Printer Card
+
+Der Zustand entscheidet das Layout, und der Zustand kommt aus einer
+Zeichenkette, über die sich vier Integrationen nicht einig sind. Beides prüfen.
+
+- [ ] Die fünf Layouts durchspielen: **druckend/pausiert** zeigt alles;
+      **leerlauf/fertig** keinen Fortschritt, keine Prozente, keine Lagenzahl;
+      **Fehler** roter Rahmen und „Fehler quittieren“ als Primärbutton;
+      **offline** gedimmt und **gar keine Steuerung**
+- [ ] **Offline ist grau, nicht rot.** Ein am Netzschalter ausgeschalteter
+      Drucker ist ein normaler Zustand; ihn als Fehler zu färben, erzieht zum
+      Wegsehen
+- [ ] Offline, aber der Detail-Block lebt: die Steckdose bleibt schaltbar —
+      sie ist der Weg zurück — und **der Block wird dabei nie eingeklappt, was
+      immer `collapse_blocks` sagt**
+- [ ] `state_map` gewinnt vor allem anderen: eigene Wörter (`beschaeftigt:
+      printing`) eintragen und das Layout umspringen sehen
+- [ ] Ein Wert, den nichts erkennt, liest als **Leerlauf, nie als Fehler**.
+      Einen Fantasiezustand setzen: Status unscharf ist besser als ein roter
+      Rahmen um eine gesunde Maschine
+- [ ] Die Substring-Regel greift ohne Liste: `heatbed_preheating`,
+      `filament_loading`, `auto_bed_leveling` müssen alle als „druckend“ lesen
+- [ ] **Als `entity` den Druckstatus nehmen, nicht die Stage.** Mit der Stage
+      als `entity` gegenprüfen, wie unruhig das Layout wird — achtzig Werte
+      entscheiden dann, ob der Fortschrittsbalken da ist
+- [ ] Kein Start-Button an einem leerlaufenden Drucker. Erst mit `start_action`
+      kommt er zurück
+- [ ] **Der Notaus darf nicht gefunden werden.** An einem Moonraker-Drucker
+      prüfen, dass der Stop-Button den Job abbricht und nicht
+      `emergency_stop` drückt — dessen Id endet ebenfalls auf `_stop`, und die
+      Rückfrage verspräche einen abgebrochenen Druck und lieferte einen toten
+      Drucker. Es gibt dazu einen Unit-Test, aber einmal an echter Firmware
+      gegenprüfen
+- [ ] Stop fragt zuerst und nennt, was verloren geht; `confirm_stop: false`
+      nimmt die Rückfrage weg
+- [ ] Zubehör **aus**schalten fragt ebenso (`confirm_power_off`), Zubehör
+      **ein**schalten fragt nie. Die Schieflage ist Absicht
+- [ ] Geschwindigkeits-Reihe: den `select` unerreichbar machen (hybrides MQTT
+      an einer P1S) — die Reihe zeigt weiter, was der Drucker tut, die Pillen
+      sind nur zurückgenommen. Keine Reihe mit vier dunklen Pillen
+- [ ] AMS: ein Sensor pro Slot, Material, Restmenge als Zahl und als Balken.
+      Unter `filament_warn` (40 %) beides amber
+- [ ] Eine Spule, die ihren Rest nicht kennt, meldet `-1` — es darf **weder
+      eine Zahl noch ein leerer Balken** erscheinen
+- [ ] Zwei AMS-Einheiten bleiben zwei Reihen zu vier. Beide zählen 1–4; würden
+      sie zusammengelegt, verschwände die Hälfte
+- [ ] Kamera ist ein Standbild, und das Abzeichen sagt das auch. Mit
+      `camera_live: true` muss es **LIVE** sagen — ein Zehn-Sekunden-Standbild
+      mit LIVE-Abzeichen ist genau, wie ein abgebrochener Druck wie ein
+      laufender aussieht
+- [ ] Das Standbild aktualisiert nur, solange die Karte sichtbar ist: auf eine
+      andere Ansicht wechseln und im Netzwerk-Tab prüfen, dass nichts mehr
+      geholt wird
+- [ ] Fortschrittswelle fließt beim Drucken und **flacht bei Pause ab** — die
+      Form sagt es vor dem Wort. Am Handy gegenprüfen: in echter Breite
+      gezeichnet, keine lange träge Dünung
+- [ ] Prozente sitzen in der Pille im Header, Lage und Restzeit unter der
+      Welle. Eine gefaltete Karte beantwortet weiter „wie weit ist er“
+- [ ] Chips im Detail-Block: Rand ohne Füllung. Die Zubehör-Zeilen darunter
+      sind Schalter und gefüllt
+- [ ] Ein kleiner Button ohne Aktion wird nicht gezeichnet. `secondary_actions`
+      auf `[stop, files, filament]` setzen, ohne `files_action` und
+      `filament_action`: nur Stop erscheint
+
+## M3 Appliance Card
+
+Die Karte setzt nichts über das Gerät voraus, also ist der Prüfgegenstand der
+leere Fall: was passiert, wenn ein Block nicht konfiguriert oder seine Entität
+weg ist.
+
+- [ ] `layout: [progress, buttons]` — bestimmt Reihenfolge **und** Sichtbarkeit.
+      Was nicht in der Liste steht, wird nicht gezeichnet; es gibt dafür keine
+      zweiten `show_*`-Schalter, die widersprechen könnten
+- [ ] Die vier Kombinationen aus `wave_style` und `animation` durchgehen:
+      wavy+on wandert, wavy+off ist eine eingefrorene Welle, flat+on ist eine
+      Gerade die füllt, flat+off eine Gerade ohne Bewegung. `flat` ist ein
+      Aussehen, keine Animationseinstellung
+- [ ] Unter `prefers-reduced-motion` **behält die Welle ihre Form** und hört nur
+      auf zu wandern. Die Welle ist die Identität, die Bewegung die Dekoration
+- [ ] `states`: erste passende Regel gewinnt, eine Regel ganz ohne Bedingung
+      fängt alles ab. Eine getroffene Regel setzt auch Icon und **Akzentfarbe
+      der ganzen Karte**
+- [ ] Ganz ohne `states`: `heavy_duty` liest als „Heavy duty“, eine Zahl behält
+      ihre Einheit
+- [ ] Fortschritt ohne `percentage_entity`, aber mit `remaining_entity`: der
+      Balken läuft unbestimmt, solange eine Restzeit bekannt ist
+- [ ] `remaining_entity` in allen vier Formen prüfen, die Integrationen
+      liefern: Minuten, Sekunden, `1:24:00` und ein absoluter Zeitstempel
+- [ ] Ein Button ohne eigenes `tap_action` bekommt die Aktion seiner Domain
+      (`button.press`, `script.turn_on`, Toggle bei `switch`). Ein `switch`
+      füllt sich mit seiner Farbe, solange er an ist
+- [ ] `confirmation` an einem Button: fragt, bevor sie schaltet
+- [ ] Ein Chip ist Anzeige, bis er ein `tap_action` bekommt — dann ist er
+      gefüllt wie ein Button
+- [ ] **Der leere Fall, blockweise:** Slider und Pillenreihe mit unerreichbarer
+      Entität werden **nicht gezeichnet** (eine tote Spur lädt zum Ziehen ein,
+      das nichts tut); ein Button bleibt sichtbar, aber gedimmt und nicht
+      klickbar, weil er zum Aufbau gehört; ein Chip fällt ganz weg
+- [ ] Ist die Status-Entität selbst unerreichbar, dimmt die ganze Karte
+- [ ] `selects[].options` schneidet die Reihe auf eine Teilmenge zu, **in der
+      geschriebenen Reihenfolge**; `icons` gibt einzelnen Optionen ein Glyph
+- [ ] `popup` konfiguriert: ein Tipp öffnet es ohne jedes `tap_action`. Mit
+      `tap_action: more-info` und `hold_action: popup` wandert es auf die
+      lange Geste
+- [ ] `[[entity_id]]` und `[[name]]` im `content` lösen auf die Werte dieser
+      Karte auf — denselben Popup-Block an zwei Geräten verwenden und prüfen,
+      dass jedes sein eigenes zeigt
+- [ ] `action: popup` ohne konfiguriertes `popup` fällt auf More-Info zurück
+      statt einen leeren Dialog zu öffnen
 
 ## Bekannte Einschränkungen
 
