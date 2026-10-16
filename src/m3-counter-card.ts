@@ -293,7 +293,7 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
       // question names both before anything is sent.
       const shown = this.hass.states[cfg.entity]?.state ?? "";
       this._confirm = {
-        title: this._t("counter_calibrate_confirm"),
+        title: this._t("counter_calibrate_confirm").replace("{to}", String(wanted)),
         message: this._t("counter_calibrate_confirm_body")
           .replace("{from}", shown)
           .replace("{to}", String(wanted)),
@@ -543,7 +543,11 @@ export class M3CounterCard extends TemplatedCard(LitElement) implements Lovelace
             subtitle,
             onClick: moreInfo,
             right:
-              showPowerChip || this._adjustTarget
+              // The blocker counts too: a blocked pencil is the whole point of
+              // drawing one. Gating on the target alone meant `adjustable` on a
+              // plain sensor still showed nothing at all — unless a power chip
+              // happened to open the header for it.
+              showPowerChip || this._adjustTarget || this._adjustBlocker
                 ? html`
                     <div class="header-right">
                       ${showPowerChip
