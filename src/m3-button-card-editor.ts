@@ -431,6 +431,7 @@ export class M3ButtonCardEditor
           <div class="panel-content">
             ${renderChipButtonsListEditor({
               hass: this.hass,
+              language: this._language,
               items: this._config.chip_buttons ?? [],
               onChange: (items) => this._chipButtonsChanged(items),
               computeLabel: this._computeLabel,

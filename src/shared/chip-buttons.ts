@@ -52,8 +52,13 @@ const INACTIVE_ENTITY_COLOR_VAR =
   "var(--state-inactive-color, var(--disabled-text-color, var(--primary-text-color)))";
 
 // The three ways a row can handle more chips than fit: stretched to share the
-// width, wrapped onto a second line, or kept on one line and scrolled.
-export function chipRowLayoutClass(config: ChipButtonsRowConfig): "stretch" | "wrap" | "scroll" {
+// width, wrapped onto a second line, or kept on one line and scrolled. A
+// `smart` stretch is still a stretch — it shares the width, only not evenly —
+// so it keeps the `stretch` class and adds `smart` for updateSmartStretch().
+export function chipRowLayoutClass(
+  config: ChipButtonsRowConfig,
+): "stretch smart" | "stretch" | "wrap" | "scroll" {
+  if (config.stretch === "smart") return "stretch smart";
   return config.stretch ? "stretch" : config.wrap ? "wrap" : "scroll";
 }
 
@@ -384,6 +389,80 @@ export class ChipRowFadeController {
   }
 }
 
+// What decides a row's smart widths and label slides, read without touching
+// layout: textContent and the chip count are plain DOM reads, where measuring
+// a label forces the browser to lay the row out. Icons are left out on
+// purpose — a chip's icon box has a fixed size, so it never moves a width.
+export function chipRowSignature(rows: readonly HTMLElement[]): string {
+  return rows
+    .map(
+      (row) =>
+        `${row.classList.contains("smart") ? "s" : ""}${row.classList.contains("stretch") ? "t" : ""}` +
+        `${row.childElementCount}:${row.textContent ?? ""}`,
+    )
+    .join("\n");
+}
+
+// Runs both measuring passes over every chip row under `root`, in the order
+// they depend on each other: which label overflows depends on the widths.
+export function layoutChipRows(root: ParentNode): void {
+  updateSmartStretch(root);
+  updateChipLabelScroll(root);
+}
+
+// Everything a card drawing chip rows owes them after a render: the edge
+// fades, the `stretch: smart` widths and the sliding labels. One controller
+// rather than three calls so a card can't wire up some of it and quietly miss
+// the rest. Drive it from `updated()`, release it in `disconnectedCallback()`.
+//
+// The two measuring passes don't run on every render. A `hass` tick
+// re-renders every chip card on a view, and measuring each time costs a
+// forced layout per chip per tick. They run when a row is first seen, when it
+// resizes, and when what is written on its chips changes — which is the only
+// time their answer can.
+export class ChipRowController {
+  private _fades = new ChipRowFadeController();
+  private _observer?: ResizeObserver;
+  private _rows: HTMLElement[] = [];
+  private _root?: ParentNode;
+  private _signature?: string;
+
+  constructor(private readonly _layout: (root: ParentNode) => void = layoutChipRows) {}
+
+  public sync(root: ParentNode): void {
+    this._fades.sync(root);
+    this._root = root;
+    const rows = Array.from(root.querySelectorAll<HTMLElement>(".m3-chip-buttons"));
+    const changed =
+      rows.length !== this._rows.length || rows.some((row, index) => row !== this._rows[index]);
+    if (changed) {
+      this._observer?.disconnect();
+      this._observer = undefined;
+      this._rows = rows;
+      if (rows.length > 0) {
+        this._observer = new ResizeObserver(() => this._measure());
+        for (const row of rows) this._observer.observe(row);
+      }
+    }
+    if (rows.length > 0 && (changed || chipRowSignature(rows) !== this._signature)) this._measure();
+  }
+
+  public disconnect(): void {
+    this._fades.disconnect();
+    this._observer?.disconnect();
+    this._observer = undefined;
+    this._rows = [];
+    this._root = undefined;
+    this._signature = undefined;
+  }
+
+  private _measure(): void {
+    if (!this._root) return;
+    this._signature = chipRowSignature(this._rows);
+    this._layout(this._root);
+  }
+}
+
 export const chipButtonsStyles = css`
   .m3-chip-buttons {
     display: flex;
@@ -537,6 +616,17 @@ export const chipButtonsStyles = css`
     100% {
       transform: translateX(var(--m3cb-scroll-distance, 0));
     }
+  }
+
+  /* The same ellipsis wherever motion is off: the OS setting, or a card's
+     own animation: false, which a host marks with .no-animations. */
+  .no-animations .m3-chip-button .label.scrolling {
+    text-overflow: ellipsis;
+  }
+
+  .no-animations .m3-chip-button .label.scrolling .label-text {
+    display: inline;
+    animation: none;
   }
 
   @media (prefers-reduced-motion: reduce) {

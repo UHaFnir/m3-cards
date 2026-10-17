@@ -13,11 +13,9 @@ import { shouldAnimate } from "./shared/animation";
 import { resolveThemeColor } from "./shared/color-config";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import {
-  ChipRowFadeController,
+  ChipRowController,
   chipButtonsStyles,
   renderChipButtons,
-  updateChipLabelScroll,
-  updateSmartStretch,
 } from "./shared/chip-buttons";
 import { TapHoldGesture } from "./shared/gestures";
 import { TemplatedCard } from "./shared/templated-card";
@@ -29,7 +27,7 @@ export class M3ChipButtonsCard extends TemplatedCard(LitElement) implements Love
   @state() private _config?: M3ChipButtonsCardConfig;
   @state() private _pressedKey?: string;
 
-  private _fades = new ChipRowFadeController();
+  private _chipRow = new ChipRowController();
   private _gestures = new TapHoldGesture();
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
@@ -49,31 +47,14 @@ export class M3ChipButtonsCard extends TemplatedCard(LitElement) implements Love
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     this._gestures.cancel();
-    this._fades.disconnect();
+    this._chipRow.disconnect();
   }
 
-  // The edge fades on a scrolling row belong on the sides that actually hide
-  // chips — see ChipRowFadeController in shared/chip-buttons.ts. Smart widths
-  // and sliding labels depend on the row's width too, so they re-run on every
-  // render and whenever the row is resized.
+  // Edge fades, smart widths and sliding labels — see ChipRowController in
+  // shared/chip-buttons.ts.
   protected updated(changed: PropertyValues): void {
     super.updated(changed);
-    this._fades.sync(this.renderRoot);
-    const row = this.renderRoot.querySelector<HTMLElement>(".m3-chip-buttons");
-    if (row !== this._observedRow) {
-      this._rowObserver?.disconnect();
-      this._observedRow = row ?? undefined;
-      if (row) {
-        this._rowObserver = new ResizeObserver(() => this._updateLayout());
-        this._rowObserver.observe(row);
-      }
-    }
-    this._updateLayout();
-  }
-
-  private _updateLayout(): void {
-    updateSmartStretch(this.renderRoot);
-    updateChipLabelScroll(this.renderRoot);
+    this._chipRow.sync(this.renderRoot);
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
@@ -141,15 +122,6 @@ export class M3ChipButtonsCard extends TemplatedCard(LitElement) implements Love
 
       .card-inner.no-animations .m3-chip-button {
         transition: none;
-      }
-
-      .card-inner.no-animations .label.scrolling {
-        text-overflow: ellipsis;
-      }
-
-      .card-inner.no-animations .label.scrolling .label-text {
-        display: inline;
-        animation: none;
       }
     `,
   ];

@@ -64,8 +64,8 @@ radius: 28
 | `buttons[].name` | string | entity `friendly_name` | Displayed name |
 | `buttons[].icon` | string | entity icon, otherwise a generic icon | Icon |
 | `buttons[].show_name` | boolean | `true` | `false` hides the name; the state stays (see `show_state`). With both off the chip is a round icon button |
-| `buttons[].color` | string | `primary` | HA color name or any CSS color for the chip in its **active** state. No editor field for this one — set `use_entity_color` and/or `state_colors` instead, or set it via YAML |
-| `buttons[].inactive_color` | string | – (default theme grey) | Color for the chip in its **inactive** state. Same as `color`: YAML-only, no editor field |
+| `buttons[].color` | string | `primary` | HA color name or any CSS color for the chip in its **active** state — the one to use for a chip without an entity, or one resting on `off` (a script, a scene) |
+| `buttons[].inactive_color` | string | – (default theme grey) | Color for the chip in its **inactive** state |
 | `buttons[].use_entity_color` | boolean | `false` | Color the chip from the entity's own HA state color instead of `color`/`inactive_color` |
 | `buttons[].state_colors` | map | – | Per-state color overrides (e.g. `unlocked: red`), applied on top of `color`/`use_entity_color` for that exact state, whether HA counts it as active or not (e.g. `locked: green`) — the reliable way to color a state HA doesn't expose a color variable for |
 | `buttons[].show_state` | boolean | `true` | Show the entity state next to the name |
