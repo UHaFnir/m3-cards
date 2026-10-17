@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { positionDropdown } from "./dropdown-menu";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { M3DropdownMenu, positionDropdown } from "./dropdown-menu";
 
 const VIEWPORT = { width: 400, height: 800 };
 const MENU = { width: 200, height: 160 };
@@ -52,5 +52,62 @@ describe("positionDropdown", () => {
       VIEWPORT,
     );
     expect(nearRight.left).toBe(400 - 8 - 200);
+  });
+});
+
+// No DOM in this run: the menu is built from its prototype, with a stand-in
+// dialog behind renderRoot, which is all the handover touches.
+interface MenuInternals {
+  _onClose?: () => void;
+  _handleClose(): void;
+  replaceHost(): void;
+}
+
+function fakeMenu() {
+  const dialog = {
+    open: true,
+    close() {
+      this.open = false;
+    },
+  };
+  const menu = Object.create(M3DropdownMenu.prototype) as MenuInternals;
+  Object.defineProperty(menu, "renderRoot", { value: { querySelector: () => dialog } });
+  Object.defineProperty(menu, "_ignoreNextClose", { value: false, writable: true });
+  return { menu, dialog };
+}
+
+describe("M3DropdownMenu host handover", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("tells the outgoing host at once, and not the incoming one later", () => {
+    vi.stubGlobal("window", { removeEventListener: vi.fn() });
+    const { menu, dialog } = fakeMenu();
+    const outgoing = vi.fn();
+    const incoming = vi.fn();
+    menu._onClose = outgoing;
+
+    menu.replaceHost();
+    expect(dialog.open).toBe(false);
+    expect(outgoing).toHaveBeenCalledTimes(1);
+
+    // openFor() installs the next host, then the replaced menu's queued
+    // close event finally arrives.
+    menu._onClose = incoming;
+    menu._handleClose();
+    expect(incoming).not.toHaveBeenCalled();
+    expect(window.removeEventListener).not.toHaveBeenCalled();
+
+    // The incoming host's own close still reaches it.
+    menu._handleClose();
+    expect(incoming).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when no menu is open", () => {
+    const { menu, dialog } = fakeMenu();
+    dialog.open = false;
+    const onClose = vi.fn();
+    menu._onClose = onClose;
+    menu.replaceHost();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

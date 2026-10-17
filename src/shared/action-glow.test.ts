@@ -59,4 +59,9 @@ describe("actionGlowColor", () => {
     expect(actionGlowColor("heat")).toBe(ACTION_GLOW_COLOR_HEAT);
     expect(actionGlowColor("cool")).toBe(ACTION_GLOW_COLOR_COOL);
   });
+  it("takes the card's own heat/cool colours, so mode_colors retunes the frame", () => {
+    const colors = { heat: "#ff00aa", cool: "var(--blue-color)" };
+    expect(actionGlowColor("heat", colors)).toBe("#ff00aa");
+    expect(actionGlowColor("cool", colors)).toBe("var(--blue-color)");
+  });
 });

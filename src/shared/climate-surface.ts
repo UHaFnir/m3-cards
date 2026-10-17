@@ -1,23 +1,21 @@
-// The visual language both climate cards borrow from the ecosee reference
-// card, in one place so the full card's setpoint pill and the mini card's
-// setpoint segment cannot drift apart.
+// The surface recipe behind the climate card's `expressive` style, kept out
+// of the card file so a second climate card can wear it without a copy.
 //
-// Two ideas carry that reference's Home Screen (see
-// `reference/ecosee/docs/visual-spec.md` and `src/screens/home-screen.ts`):
+// Two ideas carry it:
 //
-//  1. The **setpoint oval** — the heat/cool colour appears as a thin outline
-//     over a faint same-colour wash with a matching glyph and numeral, never
-//     as a solid fill. That leaves the equipment glow as the only saturated
-//     element on the card, so "the thermostat is running right now" reads
-//     louder than "the thermostat is set to heat".
-//  2. The **dominant current temperature** — one near-weightless, tightly
-//     tracked figure with a faint top-bright sheen, and nothing else on the
-//     card allowed to compete with it.
+//  1. The **setpoint surface** — the heat/cool colour appears as a thin
+//     outline over a faint same-colour wash with a matching glyph and numeral,
+//     never as a solid fill. That leaves the equipment frame as the only
+//     saturated element on the card, so "the thermostat is running right now"
+//     reads louder than "the thermostat is set to heat".
+//  2. The **dominant current temperature** — one heavy, tightly tracked figure
+//     with a faint top-bright sheen, and nothing else on the card allowed to
+//     compete with it.
 //
-// Both are re-expressed for Home Assistant here: the wash is measured against
-// the real theme surface via `tintOn()` instead of ecosee's fixed near-black
-// canvas, and the sheen fades toward the card background rather than toward
-// transparent, so neither breaks on a light theme or over a wallpaper.
+// Both are measured rather than assumed: the wash is mixed against the real
+// theme surface via `tintOn()`, and the sheen fades toward the card
+// background rather than toward transparent, so neither breaks on a light
+// theme or over a wallpaper.
 
 import { css, unsafeCSS } from "lit";
 import {
@@ -73,9 +71,9 @@ export function resolveSetpointSurface(
 }
 
 // Base rules for anything wearing the setpoint language. Geometry (size,
-// radius, layout) stays with the card — the full card's pill and the mini
-// card's segmented control are shaped differently on purpose — so only the
-// colour recipe lives here.
+// radius, layout) stays with the card — the setpoint control and the mode
+// button are shaped differently on purpose — so only the colour recipe lives
+// here.
 //
 // `--m3-setpoint-bg` / `--m3-setpoint-ink` / `--m3-setpoint-line` come from
 // `resolveSetpointSurface()`; without them the class is inert, which is what
@@ -93,23 +91,26 @@ export const setpointSurfaceStyles = css`
 
 // The dominant current-temperature figure.
 //
-// Cross-browser constraints below are lifted from the reference card's
-// ADR-0005 (`reference/ecosee/docs/adr/0005-cross-browser-typography.md`),
-// which paid for them with two bugs. Do not "tidy" them:
+// The sheen is a `background-clip: text` gradient, and three of the rules
+// below exist only because that technique breaks in specific engines. They
+// look like clutter and are not — each one is a rendering bug when removed:
 //
-//  * `.temp` must be laid out `display: inline-block`, never as a flex or grid
-//    item. Firefox does not reliably clip a `background-clip: text` gradient
-//    inside a flex container and renders mangled digits. `.hero-temp` is
-//    therefore a plain block with `text-align: center`, not a flex row.
-//  * Keep both the unprefixed and `-webkit-` `background-clip`, over a solid
-//    `color` fallback, so an engine without the gradient still paints ink.
-//  * Keep the symmetric padding cancelled by equal negative margins: the
-//    gradient paints only inside the border box, and with compact font metrics
-//    the digit ink can sit within a whisker of the tight line box's edge.
+//  * `.value` must be laid out `display: inline-block`, never as a flex or
+//    grid item. Firefox does not reliably clip a `background-clip: text`
+//    gradient inside a flex container and renders mangled digits.
+//    `.hero-temp` is therefore a plain block with `text-align: center`, not a
+//    flex row.
+//  * Keep both the unprefixed and `-webkit-` `background-clip` (Safari still
+//    needs the prefix), over a solid `color` fallback, so an engine without
+//    the gradient still paints ink instead of transparent glyphs.
+//  * Keep the vertical padding cancelled by an equal negative margin: the
+//    gradient paints only inside the border box, and with compact font
+//    metrics the top of a digit sits within a whisker of the tight line box —
+//    without the padding it is clipped off.
 //
-// The sheen itself is ours, not ecosee's: it fades toward the card background
-// instead of toward a fixed near-white, so it self-corrects between light and
-// dark themes and never lets a wallpaper show through the glyphs.
+// The gradient fades toward the card background instead of toward a fixed
+// near-white, so it self-corrects between light and dark themes and never
+// lets a wallpaper show through the glyphs.
 export const heroTempStyles = css`
   .hero {
     /* An inline-size container so the figure scales with the card's column
@@ -202,9 +203,8 @@ export const heroTempStyles = css`
   }
 
   /* The unit rides along the top of the figure at a fraction of its size, so
-     the number itself stays the thing you read. ecosee prints no unit at all;
-     Home Assistant users switch between °C and °F, so it earns its place —
-     just not at full weight. Now that the numeral itself carries the heaviest
+     the number itself stays the thing you read. Home Assistant users switch
+     between °C and °F, so it earns its place — just not at full weight. Now that the numeral itself carries the heaviest
      weight on the card, the unit goes the other way (a light 300) so the two
      read as one deliberate contrast rather than two similarly-bold shapes. */
   .hero-temp .unit {

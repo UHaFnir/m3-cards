@@ -1,8 +1,8 @@
-// Shared logic + markup/styles behind the climate cards' action-glow frame
-// (see ACTION_GLOW_* constants in const.ts for the visual geometry). Both
-// m3-climate-card and m3-climate-card-mini call this so the
-// hvac_action/hvac_mode resolution and the glow's CSS can't drift between
-// them.
+// Shared logic + markup/styles behind the climate card's action-glow frame
+// (see ACTION_GLOW_* constants in const.ts for the visual geometry). Today
+// only m3-climate-card's `expressive` style draws it; it lives in shared/ so
+// another climate card can take it up without copying the
+// hvac_action/hvac_mode resolution or the glow's CSS.
 
 import { css, html, nothing, type TemplateResult } from "lit";
 import {
@@ -76,12 +76,21 @@ export function resolveActionGlow(
   return { state: mode, running: hvacAction === undefined };
 }
 
-// The color the glow layer should use for the given state, resolved to the
-// suite's existing heat/cool palette (the same hexes DEFAULT_MODE_COLORS
-// already uses for mode pills/icons), so the glow reads as one accent system
-// with the rest of the card rather than a competing color.
-export function actionGlowColor(state: ActionGlowState): string {
-  return state === "heat" ? ACTION_GLOW_COLOR_HEAT : ACTION_GLOW_COLOR_COOL;
+// The card's own heat/cool colours, i.e. after its `mode_colors` override.
+export interface ActionGlowColors {
+  heat?: string;
+  cool?: string;
+}
+
+// The color the glow layer should use for the given state. The card passes
+// the heat/cool colours it already resolved for its mode pill and setpoint,
+// so a `mode_colors` override retunes the frame along with them and the glow
+// reads as one accent system with the rest of the card. Without them it
+// falls back to the palette DEFAULT_MODE_COLORS is built from.
+export function actionGlowColor(state: ActionGlowState, colors: ActionGlowColors = {}): string {
+  return state === "heat"
+    ? (colors.heat ?? ACTION_GLOW_COLOR_HEAT)
+    : (colors.cool ?? ACTION_GLOW_COLOR_COOL);
 }
 
 // Structural CSS for the glow layer: an absolutely positioned overlay,
@@ -135,13 +144,14 @@ export const actionGlowStyles = css`
 export function renderActionGlow(
   glow: ActionGlow,
   enabled: boolean | undefined,
+  colors?: ActionGlowColors,
 ): TemplateResult | typeof nothing {
   if (enabled === false) return nothing;
   const { state, running } = glow;
   return html`
     <div
       class="action-glow ${state ? "active" : ""} ${state && !running ? "armed" : ""}"
-      style=${state ? `--m3-action-glow-color: ${actionGlowColor(state)};` : ""}
+      style=${state ? `--m3-action-glow-color: ${actionGlowColor(state, colors)};` : ""}
       aria-hidden="true"
     ></div>
   `;

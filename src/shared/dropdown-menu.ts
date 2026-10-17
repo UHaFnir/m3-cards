@@ -1,5 +1,7 @@
 import { LitElement, html, css, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { STANDARD_EASING } from "./animation";
+import { anchorFocus } from "./focus-anchor";
+import { tintInk, tintOn } from "./color-config";
 
 // Shared dropdown/select menu for every card that needs a "pick one of these"
 // control (climate mode + preset today, more to come).
@@ -39,6 +41,10 @@ const THEME_VARS = [
   "--ha-card-background",
   "--primary-background-color",
 ] as const;
+
+// The selected item: the theme accent, washed at this share.
+const SELECTED_COLOR = "var(--primary-color)";
+const SELECTED_TINT = 18;
 
 export interface DropdownMenuItem {
   value: string;
@@ -106,11 +112,17 @@ export class M3DropdownMenu extends LitElement {
   private _onClose?: () => void;
   private _anchor?: HTMLElement;
   private _minWidth = 0;
+  private _ignoreNextClose = false;
   private _reposition = (): void => {
     this._applyPosition();
   };
 
   public async openFor(options: DropdownMenuOptions): Promise<void> {
+    // showModal() remembers what had focus and hands it back on close, with a
+    // scroll to it. After a tap that is often nothing near the menu — see
+    // shared/focus-anchor.ts — so focus is parked on the trigger first, and
+    // closing the menu leaves the dashboard where it is.
+    anchorFocus(options.anchor);
     this._items = options.items;
     this._label = options.label;
     this._onSelect = options.onSelect;
@@ -133,6 +145,22 @@ export class M3DropdownMenu extends LitElement {
     this._focusItem(Math.max(0, this._items.findIndex((item) => item.selected)));
   }
 
+  // Closes the menu on behalf of the next host. dialog.close() queues its
+  // `close` event as a task, so it would arrive after openFor() has installed
+  // the new host's callbacks: the new host would hear its own menu close while
+  // it is open, and the resize listener it just got would be removed. So the
+  // outgoing host is told here, synchronously, and that one event is ignored.
+  public replaceHost(): void {
+    const dialog = this._dialog;
+    if (!dialog?.open) return;
+    const onClose = this._onClose;
+    this._onClose = undefined;
+    this._onSelect = undefined;
+    this._ignoreNextClose = true;
+    dialog.close();
+    onClose?.();
+  }
+
   public closeMenu(): void {
     const dialog = this._dialog;
     if (dialog?.open) dialog.close();
@@ -153,6 +181,11 @@ export class M3DropdownMenu extends LitElement {
       if (value) this.style.setProperty(name, value);
       else this.style.removeProperty(name);
     }
+    // The selected row is the accent as ink on a wash of itself, which is the
+    // pair that fails on a light theme when it's left to CSS. Both are
+    // measured against the anchor's real surface, the one the menu copies.
+    this.style.setProperty("--m3-dropdown-selected-bg", tintOn(anchor, SELECTED_COLOR, undefined, SELECTED_TINT));
+    this.style.setProperty("--m3-dropdown-selected-ink", tintInk(anchor, SELECTED_COLOR, undefined, SELECTED_TINT));
   }
 
   private _applyPosition(): void {
@@ -204,6 +237,10 @@ export class M3DropdownMenu extends LitElement {
   }
 
   private _handleClose(): void {
+    if (this._ignoreNextClose) {
+      this._ignoreNextClose = false;
+      return;
+    }
     window.removeEventListener("resize", this._reposition);
     const onClose = this._onClose;
     this._onClose = undefined;
@@ -341,8 +378,8 @@ export class M3DropdownMenu extends LitElement {
     }
 
     .item.selected {
-      background: color-mix(in srgb, var(--primary-color) 18%, transparent);
-      color: var(--primary-color);
+      background: var(--m3-dropdown-selected-bg);
+      color: var(--m3-dropdown-selected-ink);
     }
 
     .item ha-icon {
@@ -366,7 +403,7 @@ export function openDropdownMenu(options: DropdownMenuOptions): void {
     instance = document.createElement(TAG) as M3DropdownMenu;
     document.body.appendChild(instance);
   }
-  instance.closeMenu();
+  instance.replaceHost();
   void instance.openFor(options);
 }
 

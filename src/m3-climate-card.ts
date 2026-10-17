@@ -822,10 +822,14 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     stepLabels?: { minus: string; plus: string };
     minusColor: string;
     plusColor: string;
+    /** A band bound's own heat/cool colour, in place of the card's mode colour. */
+    accent?: string;
     onStep: (direction: 1 | -1) => void;
   }) {
     const {
       value,
+      unit,
+      accent,
       blank,
       disabled,
       caption,
@@ -835,7 +839,16 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       plusColor,
       onStep,
     } = opts;
-    const reading = blank || value === undefined ? "–" : `${this._formatNumber(value)}°`;
+    // The unit as Home Assistant reports it, like `tiles` prints it — a bare
+    // degree sign would hide whether the number is °C or °F.
+    const missing = blank || value === undefined;
+    const reading = missing ? "–" : `${this._formatNumber(value)} ${unit}`;
+    // A missing bound keeps the card's own surface: a coloured dash would
+    // claim a heat or cool target that isn't there.
+    const surface =
+      accent && !missing
+        ? resolveSetpointSurface(this, accent, undefined, SETPOINT_WASH_PERCENT, SETPOINT_LINE_PERCENT)
+        : undefined;
     return html`
       <div class="setpoint-row">
         <button
@@ -849,6 +862,9 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
         </button>
         <div
           class="setpoint setpoint-surface"
+          style=${surface
+            ? `--m3-setpoint-bg: ${surface.bg}; --m3-setpoint-ink: ${surface.ink}; --m3-setpoint-line: ${surface.line};`
+            : nothing}
           role="button"
           tabindex="0"
           aria-label=${ariaLabel}
@@ -872,7 +888,8 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
   }
 
   /** Style `expressive` only: a band as two connected setpoint controls,
-   *  stacked — the same idiom `_renderBand` uses for `tiles`, re-skinned. */
+   *  stacked — the same idiom `_renderBand` uses for `tiles`, re-skinned.
+   *  Each bound wears the colour of its end, as in `tiles` (see `boundMode`). */
   private _renderExpressiveBand(
     target: { low?: number; high?: number },
     limits: { step: number; min: number; max: number },
@@ -902,6 +919,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           stepLabels: { minus: `${lowLabel} −`, plus: `${lowLabel} +` },
           minusColor,
           plusColor,
+          accent: this._modeColor(boundMode("low")),
           onStep: (direction) =>
             this._handleBandStep("low", target, direction, limits, dimUnavailable),
         })}
@@ -915,6 +933,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           stepLabels: { minus: `${highLabel} −`, plus: `${highLabel} +` },
           minusColor,
           plusColor,
+          accent: this._modeColor(boundMode("high")),
           onStep: (direction) =>
             this._handleBandStep("high", target, direction, limits, dimUnavailable),
         })}
@@ -923,7 +942,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
   }
 
   // ---- style: expressive -----------------------------------------------------
-  // A Material 3 Expressive redraw of the ecosee-inspired layout: the current
+  // A Material 3 Expressive layout: the current
   // temperature becomes the card's one dominant, heavy figure; the setpoint
   // is a single connected control instead of a floating pill; the mode and
   // preset buttons morph their shape by state; and the heat/cool equipment
@@ -942,8 +961,8 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       ? this._resolveColor(config.minus_active_color)
       : "var(--primary-text-color)";
 
-    // The setpoint pill and the mode pill share the reference card's oval
-    // recipe: the mode colour as a thin outline over a faint same-colour wash,
+    // The setpoint control and the mode button share one surface recipe
+    // (shared/climate-surface.ts): the mode colour as a thin outline over a faint same-colour wash,
     // never a solid fill. `resolveSetpointSurface` measures that wash against
     // the actual theme surface and hands back an ink colour that stays legible
     // on it.
@@ -966,10 +985,10 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
       MODE_PILL_INK_TARGET,
     );
 
-    // The dominant figure stays theme ink, not mode colour: the reference card
-    // reserves its heat/cool language for setpoints and equipment status, so
-    // the big number never turns amber just because the heating is switched on
-    // — the setpoint pill and the glow say that instead.
+    // The dominant figure stays theme ink, not mode colour: the heat/cool
+    // language is reserved for the setpoint and the equipment frame, so the
+    // big number never turns amber just because the heating is switched on —
+    // the setpoint control and the glow say that instead.
     const heroInk = "var(--primary-text-color)";
     const showControlLabels = config.show_control_labels !== false;
     const glow = resolveActionGlow(v.attrs, v.currentMode, v.unavailable);
@@ -983,7 +1002,10 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
           class="card-inner style-expressive ${glassCardClass(config.glass_background)} ${v.animClass}"
           style=${`border-radius: ${v.radius}; ${v.heightStyle}`}
         >
-          ${renderActionGlow(glow, config.show_action_glow)}
+          ${renderActionGlow(glow, config.show_action_glow, {
+            heat: this._modeColor("heat"),
+            cool: this._modeColor("cool"),
+          })}
           ${this._renderHeader(v)}
 
           ${v.showSensors &&
@@ -1079,10 +1101,10 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
                     ?disabled=${v.dimUnavailable}
                     aria-label=${v.statusText}
                     title=${v.statusText}
-                    aria-haspopup=${v.hvacModes.length > 2 ? "listbox" : undefined}
+                    aria-haspopup=${v.hvacModes.length > 2 ? "listbox" : nothing}
                     aria-expanded=${v.hvacModes.length > 2
-                      ? this._modeMenuOpen
-                      : undefined}
+                      ? String(this._modeMenuOpen)
+                      : nothing}
                     @click=${(event: Event) =>
                       this._handleModeButtonClick(
                         event,
@@ -1110,7 +1132,7 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
                     aria-label=${this._presetPillLabel(v.attrs.preset_mode)}
                     title=${this._presetPillLabel(v.attrs.preset_mode)}
                     aria-haspopup="listbox"
-                    aria-expanded=${this._presetMenuOpen}
+                    aria-expanded=${String(this._presetMenuOpen)}
                     @click=${(event: Event) =>
                       this._openPresetMenu(
                         event,
