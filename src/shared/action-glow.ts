@@ -58,6 +58,13 @@ const OFF: ActionGlow = { state: null, running: false };
 //
 // When the attribute is missing entirely there is nothing better to go on, so the
 // mode alone gets the full frame rather than permanently dimming those entities.
+//
+// The one mode that never lights the frame on its own is `heat_cool` (and
+// `auto`): with hvac_action absent or idle there is no telling which of the two
+// colours is armed, and a frame in the wrong one would claim something the
+// entity never said. So it waits for "heating"/"cooling" — deliberately, not
+// as an oversight, even though `heat_cool` is what the stacked band control
+// exists for.
 export function resolveActionGlow(
   attrs: Record<string, unknown>,
   currentMode: string,

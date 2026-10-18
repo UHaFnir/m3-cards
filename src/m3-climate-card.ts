@@ -243,8 +243,9 @@ export class M3ClimateCard extends TemplatedCard(LitElement) implements Lovelace
     statusText: string,
     unavailable: boolean,
   ): void {
-    if (unavailable || hvacModes.length === 0) return;
-    if (hvacModes.length <= 2) {
+    // A single mode has nothing to switch to — no menu, no no-op service call.
+    if (unavailable || hvacModes.length < 2) return;
+    if (hvacModes.length === 2) {
       const next = hvacModes.find((m) => m !== currentMode) ?? hvacModes[0];
       this._selectMode(next, unavailable);
       return;

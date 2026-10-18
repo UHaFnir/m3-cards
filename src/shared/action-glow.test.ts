@@ -3,6 +3,13 @@ import { resolveActionGlow, actionGlowColor } from "./action-glow";
 import { ACTION_GLOW_COLOR_HEAT, ACTION_GLOW_COLOR_COOL } from "../const";
 
 describe("resolveActionGlow", () => {
+  it("leaves heat_cool dark until hvac_action names a side", () => {
+    // No way to tell which colour is armed — see the module comment.
+    expect(resolveActionGlow({}, "heat_cool", false)).toEqual({ state: null, running: false });
+    expect(resolveActionGlow({ hvac_action: "idle" }, "heat_cool", false)).toEqual({ state: null, running: false });
+    expect(resolveActionGlow({ hvac_action: "cooling" }, "heat_cool", false)).toEqual({ state: "cool", running: true });
+  });
+
   it("reads hvac_action when the integration provides it", () => {
     expect(resolveActionGlow({ hvac_action: "heating" }, "heat", false)).toEqual({
       state: "heat",
