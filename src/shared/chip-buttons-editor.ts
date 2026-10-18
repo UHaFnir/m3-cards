@@ -66,8 +66,9 @@ function chipButtonFormData(item: ChipButtonConfig): ChipButtonConfig {
   };
 }
 
-// Same curated set button-card's own state-colors panel offers (see
-// const.ts) — kept in sync there rather than re-derived here.
+// Labels for the state-colour keys in const.ts. The one map for both
+// state-colors panels: this chip editor (CHIP_STATE_COLOR_KEYS) and
+// m3-button-card's own (EDITABLE_STATE_COLOR_KEYS, a subset of it).
 const stateKeyLabelMap: Record<string, TranslationKey> = {
   on: "editor_state_on",
   open: "editor_state_open",
@@ -80,7 +81,7 @@ const stateKeyLabelMap: Record<string, TranslationKey> = {
   wet: "editor_state_wet",
 };
 
-function stateKeyLabel(key: string, language: string): string {
+export function stateKeyLabel(key: string, language: string): string {
   const translationKey = stateKeyLabelMap[key];
   return translationKey ? localize(translationKey, language) : key.charAt(0).toUpperCase() + key.slice(1);
 }

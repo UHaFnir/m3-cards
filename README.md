@@ -4409,7 +4409,7 @@ radius: 28
 | `buttons[].color` | string | `primary` | HA color name or any CSS color for the chip in its **active** state — the one to use for a chip without an entity, or one resting on `off` (a script, a scene) |
 | `buttons[].inactive_color` | string | – (default theme grey) | Color for the chip in its **inactive** state |
 | `buttons[].use_entity_color` | boolean | `false` | Color the chip from the entity's own HA state color instead of `color`/`inactive_color` |
-| `buttons[].state_colors` | map | – | Per-state color overrides (e.g. `unlocked: red`), applied on top of `color`/`use_entity_color` for that exact state, whether HA counts it as active or not (e.g. `locked: green`) — the reliable way to color a state HA doesn't expose a color variable for |
+| `buttons[].state_colors` | map | – | Per-state color overrides (e.g. `unlocked: red`), applied on top of `color`/`use_entity_color` for that exact state, whether HA counts it as active or not (e.g. `locked: green`) — the reliable way to color a state HA doesn't expose a color variable for. Not applied while the entity is `unavailable`: an unavailable chip always looks unavailable |
 | `buttons[].show_state` | boolean | `true` | Show the entity state next to the name |
 | `buttons[].static_color` | boolean | `false` | Always render the chip as "active", regardless of the entity's actual state (e.g. for a status chip that should always stand out) |
 | `buttons[].interactive` | boolean | `true` | `false` turns the chip into a read-only display — no tap/hold handlers, not keyboard-focusable |

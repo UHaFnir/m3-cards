@@ -241,7 +241,11 @@ function renderChipButton(
 // max-min fairly — every chip gets the same cap, and chips narrower than it
 // keep their full width while only the ones above it are cut down to it.
 // When the row has room to spare, the rest is shared out evenly on top of
-// each content width. `fixed` chips (round icon buttons) never grow.
+// each content width. `fixed` chips (round icon buttons) keep their content
+// width in both cases: they never grow, and they are taken off the top
+// before the rest is shared out, so they are never cut either. If the fixed
+// chips alone exceed the row, the row overflows by that much — there is no
+// width to give them that would not misreport the layout.
 export function smartChipWidths(natural: number[], available: number, fixed: boolean[] = []): number[] {
   const total = natural.reduce((sum, w) => sum + w, 0);
   if (total <= available) {
@@ -249,9 +253,12 @@ export function smartChipWidths(natural: number[], available: number, fixed: boo
     const extra = growing ? (available - total) / growing : 0;
     return natural.map((w, i) => (fixed[i] ? w : w + extra));
   }
-  const order = natural.map((_, i) => i).sort((a, b) => natural[a] - natural[b]);
   const widths = [...natural];
-  let remaining = available;
+  const order = natural
+    .map((_, i) => i)
+    .filter((i) => !fixed[i])
+    .sort((a, b) => natural[a] - natural[b]);
+  let remaining = Math.max(0, available - natural.reduce((sum, w, i) => sum + (fixed[i] ? w : 0), 0));
   for (let k = 0; k < order.length; k++) {
     const cap = remaining / (order.length - k);
     const i = order[k];

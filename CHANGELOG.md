@@ -30,11 +30,19 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   now the active, accent-coloured state and a locked one the quiet, inactive
   one — the way Home Assistant's own frontend treats locks. Before, a locked
   door was highlighted and an unlocked one grey. This affects every lock on
-  the Chip Buttons Card and on the M3 Button Card, which share the list of
-  active states. A button card that still sets `state_colors.locked` stops
-  showing that colour, since the colour only applies while the button is
-  active — move it to `state_colors.unlocked`, or to `inactive_color` for the
-  locked look. On a chip, `state_colors.locked` works in either state.
+  the Chip Buttons Card, the M3 Button Card and the M3 Aquarium Card, which
+  share the list of active states — on the aquarium card a lock configured as
+  a device tile also swaps its "on" / "off" text. A button card that still
+  sets `state_colors.locked` stops showing that colour, since the colour only
+  applies while the button is active — move it to `state_colors.unlocked`, or
+  to `inactive_color` for the locked look. On a chip, `state_colors.locked`
+  works in either state.
+- **An inactive chip with `use_entity_color` follows the theme.** It now
+  resolves to the theme's `--state-<domain>-<state>-color` and only falls back
+  to the inactive grey when the theme doesn't define one. Before, every
+  inactive chip went straight to grey. This holds for every domain, not only
+  locks: a theme that defines, say, `--state-light-off-color` now colours
+  switched-off light chips as well.
 
 ## [2.4.1] – 2026-10-16
 

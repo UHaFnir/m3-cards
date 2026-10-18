@@ -354,6 +354,14 @@ describe("smartChipWidths", () => {
     expect(smartChipWidths([100, 36, 64], 260, [false, true, false])).toEqual([130, 36, 94]);
   });
 
+  it("never cuts a fixed chip either — it comes off the top first", () => {
+    expect(smartChipWidths([200, 36, 200], 90, [false, true, false])).toEqual([27, 36, 27]);
+  });
+
+  it("leaves fixed chips whole even when they alone overflow the row", () => {
+    expect(smartChipWidths([36, 36, 120], 60, [true, true, false])).toEqual([36, 36, 0]);
+  });
+
   it("fills the row exactly", () => {
     const widths = smartChipWidths([310, 95, 42, 180], 500);
     expect(widths.reduce((a, b) => a + b, 0)).toBeCloseTo(500);
